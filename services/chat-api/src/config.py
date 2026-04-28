@@ -28,6 +28,8 @@ class Settings(BaseSettings):
 
     frontend_url: str = Field(default="http://localhost:3000")
 
+    admin_email: str = Field(default="manmohan659@gmail.com")
+
     log_level: str = Field(default="INFO")
 
 
