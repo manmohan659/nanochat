@@ -16,7 +16,7 @@ from .logging_setup import (
     set_trace_id,
     set_user_id,
 )
-from .routes import conversations, messages, models
+from .routes import admin, conversations, messages, models
 
 
 @asynccontextmanager
@@ -74,6 +74,7 @@ def create_app() -> FastAPI:
     app.include_router(conversations.router)
     app.include_router(messages.router)
     app.include_router(models.router)
+    app.include_router(admin.router)
 
     @app.get("/api/health")
     async def health():
