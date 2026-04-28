@@ -30,7 +30,7 @@ export default function Hero() {
           className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/70 dark:bg-ink-soft/80 border border-cream-border/70 dark:border-ink-border backdrop-blur text-xs md:text-sm font-medium tracking-wide text-saffron"
         >
           <span className="w-1.5 h-1.5 rounded-full bg-saffron" />
-          A small, hand-cooked AI · made in India
+          A small, hand-cooked AI
         </motion.div>
 
         {/* Hindi script — playful crown */}
@@ -61,7 +61,7 @@ export default function Hero() {
           className="mt-6 max-w-2xl text-base md:text-lg text-gray-600 dark:text-ink-text-soft leading-relaxed"
         >
           A tiny, full-stack AI cooked from scratch — trained, served and shipped from one tiny kitchen.
-          Conversational, a little playful, very desi.
+          Conversational, a little playful, a lot thoughtful.
         </motion.p>
 
         {/* CTAs */}

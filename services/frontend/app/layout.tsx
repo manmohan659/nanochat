@@ -39,7 +39,7 @@ const fraunces = Fraunces({
 export const metadata: Metadata = {
   title: 'समोसाचाट — samosaChaat',
   description:
-    'Crafted with care. For India, from India. A warm, desi-flavored chat experience powered by nanochat.',
+    'Crafted with care. A warm, hand-cooked chat experience powered by nanochat.',
   icons: { icon: '/logo.svg' },
 };
 

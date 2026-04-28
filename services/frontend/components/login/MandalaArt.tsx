@@ -62,7 +62,7 @@ export default function MandalaArt() {
         <p className="font-vibes text-3xl lg:text-4xl opacity-90">samosaChaat</p>
         <p className="mt-3 font-caveat text-xl opacity-90 max-w-md">
           Chat in the language of your heart.<br />
-          A little desi, a lot thoughtful.
+          A lot thoughtful.
         </p>
       </div>
     </div>
