@@ -66,7 +66,7 @@ const TILES: Tile[] = [
     ),
   },
   {
-    title: 'Desi at heart',
+    title: 'Crafted with warmth',
     body:
       'Built with love in saffron, gold and brown. Speaks like a friend, jokes like a cousin, never forgets the chai.',
     caption: 'culture · craft',
@@ -99,7 +99,7 @@ export default function Features() {
       <div className="max-w-6xl mx-auto">
         <div className="text-center mb-14">
           <p className="text-xs md:text-sm uppercase tracking-[0.18em] text-saffron font-medium">
-            For the curious · the hungry · the desi
+            For the curious · the hungry · the thoughtful
           </p>
           <h3 className="mt-3 font-display font-medium text-[clamp(2rem,4.5vw,3.25rem)] leading-tight tracking-tight text-gray-900 dark:text-ink-text">
             Why <em className="italic text-saffron">samosaChaat</em>?
