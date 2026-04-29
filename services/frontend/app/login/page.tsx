@@ -47,7 +47,7 @@ function LoginContent() {
 
           <div className="space-y-3">
             <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-              Email (coming soon)
+              Email login (coming soon)
             </label>
             <input
               id="email"
@@ -63,6 +63,9 @@ function LoginContent() {
             >
               Continue with email
             </button>
+            <p className="text-xs text-gray-500 text-center pt-1">
+              For now, continue to chat using Google or GitHub sign-in above.
+            </p>
           </div>
 
           <p className="mt-6 text-sm text-gray-500 text-center">
