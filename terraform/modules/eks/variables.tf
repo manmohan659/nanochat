@@ -49,6 +49,12 @@ variable "node_max_unavailable_percentage" {
   default     = 33
 }
 
+variable "enable_cluster_creator_admin_permissions" {
+  description = "Grant the Terraform caller cluster-admin access through an EKS access entry."
+  type        = bool
+  default     = false
+}
+
 variable "tags" {
   description = "Tags applied to every resource."
   type        = map(string)

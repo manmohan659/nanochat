@@ -48,6 +48,24 @@ variable "max_allocated_storage" {
   default     = 100
 }
 
+variable "backup_retention_period" {
+  description = "Backup retention in days. AWS Academy/Free Tier accounts may reject values above 1."
+  type        = number
+  default     = 1
+}
+
+variable "performance_insights_enabled" {
+  description = "Enable RDS Performance Insights."
+  type        = bool
+  default     = false
+}
+
+variable "monitoring_interval" {
+  description = "Enhanced monitoring interval in seconds. Use 0 to disable."
+  type        = number
+  default     = 0
+}
+
 variable "multi_az" {
   description = "Enable Multi-AZ (recommended for prod)."
   type        = bool

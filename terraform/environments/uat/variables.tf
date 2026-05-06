@@ -19,7 +19,7 @@ variable "domain_name" {
 variable "create_route53_zone" {
   description = "Create the public Route53 hosted zone for domain_name. Set false if the hosted zone already exists in this AWS account."
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "alb_dns_name" {

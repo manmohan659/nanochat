@@ -12,6 +12,8 @@ data "aws_ssm_parameter" "eks_ami_id" {
   name = "/aws/service/eks/optimized-ami/${var.cluster_version}/amazon-linux-2/recommended/image_id"
 }
 
+data "aws_partition" "current" {}
+
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
   version = "~> 20.0"
@@ -21,6 +23,8 @@ module "eks" {
 
   cluster_endpoint_public_access  = true
   cluster_endpoint_private_access = true
+
+  enable_cluster_creator_admin_permissions = var.enable_cluster_creator_admin_permissions
 
   enable_irsa = true
 
@@ -39,6 +43,12 @@ module "eks" {
   eks_managed_node_group_defaults = {
     ami_id                     = data.aws_ssm_parameter.eks_ami_id.value
     enable_bootstrap_user_data = true
+
+    iam_role_additional_policies = {
+      ebs_csi = "arn:${data.aws_partition.current.partition}:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
+      efs_csi = "arn:${data.aws_partition.current.partition}:iam::aws:policy/service-role/AmazonEFSCSIDriverPolicy"
+      ssm     = "arn:${data.aws_partition.current.partition}:iam::aws:policy/AmazonSSMManagedInstanceCore"
+    }
   }
 
   eks_managed_node_groups = {
