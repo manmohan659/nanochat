@@ -3,11 +3,22 @@ set -euo pipefail
 
 # Rotate EKS managed node group to latest AMI with zero downtime.
 # Usage: ./scripts/rotate-nodes.sh <environment>
-# Example: ./scripts/rotate-nodes.sh dev
+# Example: ./scripts/rotate-nodes.sh prod
 
 ENVIRONMENT="${1:?Usage: rotate-nodes.sh <environment> (dev|uat|prod)}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TF_DIR="$SCRIPT_DIR/../terraform/environments/$ENVIRONMENT"
+GITHUB_ACTIONS_ROLE_ARN="${GITHUB_ACTIONS_ROLE_ARN:-arn:aws:iam::883107058766:role/samosachaat-dev-github-actions}"
+
+if [[ ! "$ENVIRONMENT" =~ ^(dev|uat|prod)$ ]]; then
+    echo "Unsupported environment: $ENVIRONMENT" >&2
+    exit 2
+fi
+
+terraform_args=()
+if [[ "$ENVIRONMENT" != "dev" ]]; then
+    terraform_args+=("-var=github_actions_role_arn=$GITHUB_ACTIONS_ROLE_ARN")
+fi
 
 echo "=== samosaChaat Node Rotation — $ENVIRONMENT ==="
 
@@ -29,7 +40,7 @@ echo ""
 read -p "Proceed with terraform apply? [y/N] " -n 1 -r
 echo ""
 if [[ $REPLY =~ ^[Yy]$ ]]; then
-    terraform apply -auto-approve
+    terraform apply -auto-approve "${terraform_args[@]}"
 else
     echo "Aborted."
     exit 0
