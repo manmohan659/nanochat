@@ -1,3 +1,10 @@
+## [1.0.3](https://github.com/manmohan659/nanochat/compare/v1.0.2...v1.0.3) (2026-05-06)
+
+
+### Bug Fixes
+
+* **ci:** wait for promoted source images ([#75](https://github.com/manmohan659/nanochat/issues/75)) ([e4136b9](https://github.com/manmohan659/nanochat/commit/e4136b9e55c0d7d8106d1fd34f67c4de1459c76f))
+
 ## [1.0.2](https://github.com/manmohan659/nanochat/compare/v1.0.1...v1.0.2) (2026-05-06)
 
 
