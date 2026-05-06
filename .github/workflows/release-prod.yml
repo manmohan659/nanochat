@@ -46,15 +46,7 @@ jobs:
         id: uat
         run: |
           set -euo pipefail
-          src=$(aws ecr describe-images \
-            --repository-name "samosachaat/frontend" \
-            --query 'sort_by(imageDetails[?imageTags!=`null`],&imagePushedAt)[].imageTags[]' \
-            --output text | tr '\t' '\n' | grep '^uat-' | tail -1 || true)
-          if [ -z "$src" ] || [ "$src" = "None" ]; then
-            echo "No uat-* image found for samosachaat/frontend" >&2
-            exit 1
-          fi
-          echo "source=$src" >> "$GITHUB_OUTPUT"
+          echo "source=uat-latest" >> "$GITHUB_OUTPUT"
 
       - name: Promote uat images to prod tag
         env:
@@ -67,26 +59,32 @@ jobs:
             repo="samosachaat/${svc}"
             echo "Promoting $repo:$SRC_REF -> $repo:$DST_REF"
             src_digest=""
+            manifest=""
             for attempt in $(seq 1 12); do
-              src_digest=$(aws ecr describe-images \
+              src_digest=$(aws ecr batch-get-image \
                 --repository-name "$repo" \
                 --image-ids imageTag="$SRC_REF" \
-                --query 'imageDetails[0].imageDigest' \
+                --query 'images[0].imageId.imageDigest' \
                 --output text 2>/dev/null || true)
-              if [ -n "$src_digest" ] && [ "$src_digest" != "None" ]; then
+              manifest=$(aws ecr batch-get-image \
+                --repository-name "$repo" \
+                --image-ids imageTag="$SRC_REF" \
+                --query 'images[0].imageManifest' \
+                --output text 2>/dev/null || true)
+              if [ -n "$src_digest" ] && [ "$src_digest" != "None" ] && [ -n "$manifest" ] && [ "$manifest" != "None" ]; then
                 break
               fi
               echo "Waiting for source image $repo:$SRC_REF to become visible in ECR ($attempt/12)"
               sleep 10
             done
-            if [ -z "$src_digest" ] || [ "$src_digest" = "None" ]; then
+            if [ -z "$src_digest" ] || [ "$src_digest" = "None" ] || [ -z "$manifest" ] || [ "$manifest" = "None" ]; then
               echo "Missing UAT source image $repo:$SRC_REF" >&2
               exit 1
             fi
-            dst_digest=$(aws ecr describe-images \
+            dst_digest=$(aws ecr batch-get-image \
               --repository-name "$repo" \
               --image-ids imageTag="$DST_REF" \
-              --query 'imageDetails[0].imageDigest' \
+              --query 'images[0].imageId.imageDigest' \
               --output text 2>/dev/null || true)
             if [ "$dst_digest" = "$src_digest" ]; then
               echo "$repo:$DST_REF already points to $src_digest; skipping"
@@ -96,11 +94,6 @@ jobs:
               echo "Destination image $repo:$DST_REF exists with a different digest: $dst_digest" >&2
               exit 1
             fi
-            manifest=$(aws ecr batch-get-image \
-              --repository-name "$repo" \
-              --image-ids imageTag="$SRC_REF" \
-              --query 'images[0].imageManifest' \
-              --output text)
             aws ecr put-image \
               --repository-name "$repo" \
               --image-tag "$DST_REF" \
