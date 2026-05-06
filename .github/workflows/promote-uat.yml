@@ -4,9 +4,20 @@ on:
   push:
     tags:
       - 'RC*'
-  pull_request:
+  workflow_run:
+    workflows: ["Build & Push Dev Images"]
+    types: [completed]
     branches: [master, main]
-    types: [closed]
+  workflow_dispatch:
+    inputs:
+      source_tag:
+        description: ECR image tag to promote, for example qa-latest or dev-<sha>
+        required: false
+        type: string
+      promotion_name:
+        description: UAT tag suffix, for example RC1 or PR68-abcdef1
+        required: false
+        type: string
 
 concurrency:
   group: promote-uat
@@ -24,8 +35,8 @@ env:
 
 jobs:
   promote:
-    name: Re-tag QA → UAT and deploy
-    if: github.event_name == 'push' || github.event.pull_request.merged == true
+    name: Re-tag tested image → UAT and deploy
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     environment: uat
     steps:
@@ -33,13 +44,23 @@ jobs:
 
       - name: Resolve tag
         id: tag
+        env:
+          INPUT_SOURCE_TAG: ${{ github.event.inputs.source_tag || '' }}
+          INPUT_PROMOTION_NAME: ${{ github.event.inputs.promotion_name || '' }}
         run: |
           set -euo pipefail
-          if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_run" ]; then
+            head_sha="${{ github.event.workflow_run.head_sha }}"
+            short_sha="$(printf '%s' "$head_sha" | cut -c1-7)"
+            echo "source=dev-${head_sha}" >> "$GITHUB_OUTPUT"
+            echo "name=merge-${short_sha}" >> "$GITHUB_OUTPUT"
+          elif [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+            echo "source=qa-latest" >> "$GITHUB_OUTPUT"
             echo "name=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
           else
             short_sha="$(git rev-parse --short HEAD)"
-            echo "name=PR${{ github.event.pull_request.number }}-${short_sha}" >> "$GITHUB_OUTPUT"
+            echo "source=${INPUT_SOURCE_TAG:-qa-latest}" >> "$GITHUB_OUTPUT"
+            echo "name=${INPUT_PROMOTION_NAME:-manual-${short_sha}}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Configure AWS credentials (OIDC)
@@ -52,10 +73,10 @@ jobs:
         id: ecr-login
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Re-tag QA images as uat-${{ steps.tag.outputs.name }}
+      - name: Re-tag source images as uat-${{ steps.tag.outputs.name }}
         env:
           REGISTRY: ${{ steps.ecr-login.outputs.registry }}
-          SRC_REF: qa-latest
+          SRC_REF: ${{ steps.tag.outputs.source }}
           DST_REF: uat-${{ steps.tag.outputs.name }}
         run: |
           set -euo pipefail
@@ -67,6 +88,10 @@ jobs:
               --image-ids imageTag="$SRC_REF" \
               --query 'images[0].imageManifest' \
               --output text)
+            if [ -z "$manifest" ] || [ "$manifest" = "None" ]; then
+              echo "Missing source image $repo:$SRC_REF" >&2
+              exit 1
+            fi
             aws ecr put-image \
               --repository-name "$repo" \
               --image-tag "$DST_REF" \
@@ -88,8 +113,12 @@ jobs:
         run: |
           helm upgrade --install samosachaat helm/samosachaat \
             -f helm/samosachaat/values-uat.yaml \
+            --set global.imageRegistry="${{ steps.ecr-login.outputs.registry }}" \
             --set global.imageTag=uat-${{ steps.tag.outputs.name }} \
             --set secrets.create=false \
             --namespace "$UAT_NAMESPACE" \
             --create-namespace \
             --wait --timeout 10m
+
+      - name: Smoke test UAT
+        run: ./scripts/smoke-test-k8s.sh "$UAT_NAMESPACE"

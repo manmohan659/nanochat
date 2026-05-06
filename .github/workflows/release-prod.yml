@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*'
+      - '!v*-*'
 
 concurrency:
   group: release-prod
@@ -41,28 +42,39 @@ jobs:
         id: ecr-login
         uses: aws-actions/amazon-ecr-login@v2
 
+      - name: Resolve UAT source tag
+        id: uat
+        run: |
+          set -euo pipefail
+          src=$(aws ecr describe-images \
+            --repository-name "samosachaat/frontend" \
+            --query 'sort_by(imageDetails[?imageTags!=`null`],&imagePushedAt)[].imageTags[]' \
+            --output text | tr '\t' '\n' | grep '^uat-' | tail -1 || true)
+          if [ -z "$src" ] || [ "$src" = "None" ]; then
+            echo "No uat-* image found for samosachaat/frontend" >&2
+            exit 1
+          fi
+          echo "source=$src" >> "$GITHUB_OUTPUT"
+
       - name: Promote uat images to prod tag
         env:
           REGISTRY: ${{ steps.ecr-login.outputs.registry }}
+          SRC_REF: ${{ steps.uat.outputs.source }}
           DST_REF: prod-${{ steps.tag.outputs.name }}
         run: |
           set -euo pipefail
           for svc in $SERVICES; do
             repo="samosachaat/${svc}"
-            src=$(aws ecr describe-images \
-              --repository-name "$repo" \
-              --query 'sort_by(imageDetails[?imageTags!=`null`],&imagePushedAt)[].imageTags[]' \
-              --output text | tr '\t' '\n' | grep '^uat-' | tail -1 || true)
-            if [ -z "$src" ] || [ "$src" = "None" ]; then
-              echo "No uat-* image found for $repo" >&2
-              exit 1
-            fi
-            echo "Promoting $repo:$src -> $repo:$DST_REF"
+            echo "Promoting $repo:$SRC_REF -> $repo:$DST_REF"
             manifest=$(aws ecr batch-get-image \
               --repository-name "$repo" \
-              --image-ids imageTag="$src" \
+              --image-ids imageTag="$SRC_REF" \
               --query 'images[0].imageManifest' \
               --output text)
+            if [ -z "$manifest" ] || [ "$manifest" = "None" ]; then
+              echo "Missing UAT source image $repo:$SRC_REF" >&2
+              exit 1
+            fi
             aws ecr put-image \
               --repository-name "$repo" \
               --image-tag "$DST_REF" \
@@ -102,6 +114,7 @@ jobs:
         run: |
           helm upgrade --install samosachaat-${{ steps.slot.outputs.candidate }} helm/samosachaat \
             -f helm/samosachaat/values-prod.yaml \
+            --set global.imageRegistry="${{ steps.ecr-login.outputs.registry }}" \
             --set global.imageTag=prod-${{ steps.tag.outputs.name }} \
             --set deployment.slot=${{ steps.slot.outputs.candidate }} \
             --set ingress.enabled=false \
@@ -113,15 +126,7 @@ jobs:
             --wait --timeout 15m
 
       - name: Smoke test candidate
-        run: |
-          set -euo pipefail
-          candidate=${{ steps.slot.outputs.candidate }}
-          kubectl -n "$PROD_NAMESPACE" rollout status deploy/frontend-${candidate} --timeout=5m
-          kubectl -n "$PROD_NAMESPACE" run smoke-${{ github.run_id }} \
-            --rm -i --restart=Never \
-            --image=curlimages/curl:8.10.1 \
-            --command -- curl -fsS --max-time 10 \
-            http://frontend-${candidate}.${PROD_NAMESPACE}.svc.cluster.local:3000/api/health
+        run: ./scripts/smoke-test-k8s.sh "$PROD_NAMESPACE" "${{ steps.slot.outputs.candidate }}"
 
       - name: Swap ingress to candidate
         run: |

@@ -17,7 +17,7 @@ env:
   AWS_REGION: ${{ vars.AWS_REGION || 'us-west-2' }}
   QA_CLUSTER: ${{ vars.QA_CLUSTER || 'samosachaat-dev-eks' }}
   QA_NAMESPACE: samosachaat-qa
-  IMAGE_TAG: qa-${{ github.run_id }}
+  IMAGE_TAG: qa-${{ github.sha }}
 
 jobs:
   build:
@@ -106,3 +106,6 @@ jobs:
             --namespace "$QA_NAMESPACE" \
             --create-namespace \
             --wait --timeout 10m
+
+      - name: Smoke test QA
+        run: ./scripts/smoke-test-k8s.sh "$QA_NAMESPACE"

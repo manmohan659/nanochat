@@ -23,6 +23,7 @@ jobs:
       auth: ${{ steps.filter.outputs.auth }}
       chat-api: ${{ steps.filter.outputs.chat-api }}
       inference: ${{ steps.filter.outputs.inference }}
+      db: ${{ steps.filter.outputs.db }}
       terraform: ${{ steps.filter.outputs.terraform }}
     steps:
       - uses: actions/checkout@v4
@@ -38,10 +39,36 @@ jobs:
               - 'services/auth/**'
             chat-api:
               - 'services/chat-api/**'
+              - 'db/**'
             inference:
               - 'services/inference/**'
+            db:
+              - 'db/**'
             terraform:
               - 'terraform/**'
+
+  commitlint:
+    name: PR commits — conventional commit lint
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install commitlint
+        run: npm install --no-save @commitlint/cli @commitlint/config-conventional
+
+      - name: Validate PR commit messages
+        run: |
+          npx commitlint \
+            --from "${{ github.event.pull_request.base.sha }}" \
+            --to "${{ github.event.pull_request.head.sha }}" \
+            --verbose
 
   test-frontend:
     name: Frontend — lint/type-check/test
@@ -189,3 +216,45 @@ jobs:
           for dir in bootstrap environments/dev environments/uat environments/prod; do
             terraform -chdir="$dir" validate
           done
+
+  docker-build:
+    name: Docker build — ${{ matrix.service }}
+    needs: changes
+    if: >
+      needs.changes.outputs.frontend == 'true' ||
+      needs.changes.outputs.auth == 'true' ||
+      needs.changes.outputs.chat-api == 'true' ||
+      needs.changes.outputs.inference == 'true' ||
+      needs.changes.outputs.db == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: frontend
+            context: services/frontend
+            dockerfile: services/frontend/Dockerfile
+          - service: auth
+            context: services/auth
+            dockerfile: services/auth/Dockerfile
+          - service: chat-api
+            context: .
+            dockerfile: services/chat-api/Dockerfile
+          - service: inference
+            context: services/inference
+            dockerfile: services/inference/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image locally
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          push: false
+          tags: samosachaat/${{ matrix.service }}:ci
+          cache-from: type=gha,scope=ci-${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=ci-${{ matrix.service }}
