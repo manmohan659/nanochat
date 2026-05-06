@@ -1,3 +1,10 @@
+## [1.0.4](https://github.com/manmohan659/nanochat/compare/v1.0.3...v1.0.4) (2026-05-06)
+
+
+### Bug Fixes
+
+* **ci:** use batch get for image promotion ([#76](https://github.com/manmohan659/nanochat/issues/76)) ([b7e0b99](https://github.com/manmohan659/nanochat/commit/b7e0b99ddf73a975c34e2f61f4e5c02dfa1d4874))
+
 ## [1.0.3](https://github.com/manmohan659/nanochat/compare/v1.0.2...v1.0.3) (2026-05-06)
 
 
