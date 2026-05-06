@@ -51,6 +51,7 @@ kube-prometheus-stack:
         group_interval: 5m
         repeat_interval: 4h
       receivers:
+        - name: "null"
         - name: slack-critical
           slack_configs:
             - api_url_file: /etc/alertmanager/secrets/alertmanager-slack-webhook/url
@@ -78,8 +79,14 @@ kube-prometheus-stack:
     service:
       type: ClusterIP
       port: 3000
+      annotations:
+        alb.ingress.kubernetes.io/healthcheck-path: /api/health
+        alb.ingress.kubernetes.io/success-codes: "200"
     ingress:
       enabled: false
+    sidecar:
+      datasources:
+        defaultDatasourceEnabled: false
 
     ## OAuth2 — no username/password, only GitHub + Google sign-in.
     ## The referenced env vars must be provided via Grafana's extraEnvVarsSecret
@@ -121,13 +128,13 @@ kube-prometheus-stack:
           - name: Prometheus
             type: prometheus
             uid: prometheus
-            url: http://prom-kube-prometheus-stack-prometheus.{{ .Release.Namespace }}.svc:9090
+            url: http://prom-prometheus.{{ .Release.Namespace }}.svc:9090
             access: proxy
             isDefault: true
           - name: Loki
             type: loki
             uid: loki
-            url: http://loki.{{ .Release.Namespace }}.svc:3100
+            url: http://observability-loki.{{ .Release.Namespace }}.svc:3100
             access: proxy
             jsonData:
               maxLines: 1000
@@ -162,23 +169,12 @@ kube-prometheus-stack:
                 type: email
                 settings:
                   addresses: manmohan659@gmail.com
-          - orgId: 1
-            name: slack-alerts
-            receivers:
-              - uid: slack
-                type: slack
-                settings:
-                  url: ${SLACK_WEBHOOK_URL}
       policies.yaml:
         apiVersion: 1
         policies:
           - orgId: 1
             receiver: email-alerts
             group_by: [alertname, severity]
-            routes:
-              - receiver: slack-alerts
-                matchers:
-                  - severity = critical
 
     resources:
       requests:
@@ -256,6 +252,7 @@ kube-prometheus-stack:
 loki-stack:
   loki:
     enabled: true
+    isDefault: false
     persistence:
       enabled: true
       size: 50Gi
@@ -265,9 +262,9 @@ loki-stack:
       schema_config:
         configs:
           - from: "2024-01-01"
-            store: tsdb
+            store: boltdb-shipper
             object_store: filesystem
-            schema: v13
+            schema: v11
             index:
               prefix: loki_index_
               period: 24h
@@ -275,6 +272,8 @@ loki-stack:
   promtail:
     enabled: true
     config:
+      clients:
+        - url: http://observability-loki:3100/loki/api/v1/push
       snippets:
         pipelineStages:
           - cri: {}

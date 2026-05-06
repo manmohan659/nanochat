@@ -10,7 +10,7 @@ global:
   imagePullSecrets: []
 
 namespace:
-  create: true
+  create: false
   name: samosachaat
 
 ## Shared env piped into every service.

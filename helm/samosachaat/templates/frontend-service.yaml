@@ -5,6 +5,9 @@ kind: Service
 metadata:
   name: {{ $svcName }}
   namespace: {{ include "samosachaat.namespace" . }}
+  annotations:
+    alb.ingress.kubernetes.io/healthcheck-path: {{ .Values.frontend.healthPath | quote }}
+    alb.ingress.kubernetes.io/success-codes: "200"
   labels:
     {{- include "samosachaat.labels" . | nindent 4 }}
     {{- include "samosachaat.selectorLabels" (dict "root" . "svc" "frontend") | nindent 4 }}

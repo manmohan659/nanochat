@@ -18,5 +18,5 @@ Required secrets in namespace {{ .Release.Namespace }}:
     --from-literal=SLACK_WEBHOOK_URL=...
 
 Useful in-cluster URLs:
-  Prometheus: http://prom-kube-prometheus-stack-prometheus.{{ .Release.Namespace }}.svc:9090
-  Loki:       http://loki.{{ .Release.Namespace }}.svc:3100
+  Prometheus: http://prom-prometheus.{{ .Release.Namespace }}.svc:9090
+  Loki:       http://observability-loki.{{ .Release.Namespace }}.svc:3100
