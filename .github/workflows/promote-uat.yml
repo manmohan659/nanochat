@@ -83,11 +83,19 @@ jobs:
           for svc in $SERVICES; do
             repo="samosachaat/${svc}"
             echo "Re-tagging $repo:$SRC_REF -> $repo:$DST_REF"
-            src_digest=$(aws ecr describe-images \
-              --repository-name "$repo" \
-              --image-ids imageTag="$SRC_REF" \
-              --query 'imageDetails[0].imageDigest' \
-              --output text 2>/dev/null || true)
+            src_digest=""
+            for attempt in $(seq 1 12); do
+              src_digest=$(aws ecr describe-images \
+                --repository-name "$repo" \
+                --image-ids imageTag="$SRC_REF" \
+                --query 'imageDetails[0].imageDigest' \
+                --output text 2>/dev/null || true)
+              if [ -n "$src_digest" ] && [ "$src_digest" != "None" ]; then
+                break
+              fi
+              echo "Waiting for source image $repo:$SRC_REF to become visible in ECR ($attempt/12)"
+              sleep 10
+            done
             if [ -z "$src_digest" ] || [ "$src_digest" = "None" ]; then
               echo "Missing source image $repo:$SRC_REF" >&2
               exit 1

@@ -1,11 +1,7 @@
 name: Deploy to EC2 (Monolith)
 
 on:
-  workflow_dispatch:          # Manual trigger from GitHub UI
-  workflow_run:               # Auto-trigger after images are built
-    workflows: ["Build & Push Dev Images"]
-    types: [completed]
-    branches: [master, main]
+  workflow_dispatch:          # Legacy EC2 path; EKS is the automated deployment target.
 
 concurrency:
   group: deploy-ec2
@@ -17,7 +13,6 @@ permissions:
 
 jobs:
   deploy:
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
