@@ -26,7 +26,7 @@ export default function OAuthButtons() {
   return (
     <div className="space-y-3">
       <a
-        href="/api/auth/google"
+        href="/auth/google"
         className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 transition-colors font-sans text-sm font-medium text-gray-700"
       >
         <GoogleIcon />
@@ -34,7 +34,7 @@ export default function OAuthButtons() {
       </a>
 
       <a
-        href="/api/auth/github"
+        href="/auth/github"
         className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 transition-colors font-sans text-sm font-medium text-gray-700"
       >
         <GitHubIcon />

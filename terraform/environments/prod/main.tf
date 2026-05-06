@@ -90,8 +90,8 @@ module "rds" {
   private_subnet_ids         = module.vpc.private_subnet_ids
   eks_node_security_group_id = module.eks.node_security_group_id
 
-  instance_class      = "db.t3.medium"
-  multi_az            = true
+  instance_class      = "db.t3.micro"
+  multi_az            = false
   skip_final_snapshot = false
   deletion_protection = true
 
