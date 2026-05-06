@@ -29,10 +29,12 @@ module "eks" {
   vpc_id             = module.vpc.vpc_id
   private_subnet_ids = module.vpc.private_subnet_ids
 
-  node_instance_type = "t3.large"
+  node_instance_type = "m7i-flex.large"
   node_min_size      = 2
   node_max_size      = 4
   node_desired_size  = 2
+
+  enable_cluster_creator_admin_permissions = true
 
   tags = local.tags
 }
@@ -40,6 +42,7 @@ module "eks" {
 module "ecr" {
   source = "../../modules/ecr"
 
+  create       = false
   force_delete = false
   tags         = local.tags
 }
@@ -47,9 +50,10 @@ module "ecr" {
 module "iam" {
   source = "../../modules/iam"
 
-  name_prefix       = local.name_prefix
-  oidc_provider_arn = module.eks.oidc_provider_arn
-  oidc_provider_url = module.eks.oidc_provider_url
+  name_prefix                = local.name_prefix
+  oidc_provider_arn          = module.eks.oidc_provider_arn
+  oidc_provider_url          = module.eks.oidc_provider_url
+  create_alb_controller_irsa = true
   # GitHub OIDC provider is created by the dev env (account-level resource).
   create_github_oidc  = false
   github_repositories = var.github_repositories

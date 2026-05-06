@@ -9,7 +9,7 @@ terraform {
 }
 
 resource "aws_ecr_repository" "this" {
-  for_each = toset(var.repository_names)
+  for_each = var.create ? toset(var.repository_names) : toset([])
 
   name                 = each.key
   image_tag_mutability = "MUTABLE"

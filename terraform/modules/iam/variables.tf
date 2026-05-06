@@ -15,6 +15,12 @@ variable "oidc_provider_url" {
   default     = ""
 }
 
+variable "create_alb_controller_irsa" {
+  description = "Create the AWS Load Balancer Controller IRSA role. Keep this static so Terraform can plan EKS and IAM in one pass."
+  type        = bool
+  default     = false
+}
+
 variable "create_github_oidc" {
   description = "Create the GitHub Actions OIDC provider + CI role. Set to true exactly once per AWS account."
   type        = bool

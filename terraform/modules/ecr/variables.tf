@@ -9,6 +9,12 @@ variable "repository_names" {
   ]
 }
 
+variable "create" {
+  description = "Create repositories. Set false in environments that reuse account-level repositories created elsewhere."
+  type        = bool
+  default     = true
+}
+
 variable "force_delete" {
   description = "Allow Terraform to destroy repositories even if they contain images (true for dev only)."
   type        = bool

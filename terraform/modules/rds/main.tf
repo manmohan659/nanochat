@@ -72,16 +72,16 @@ module "db" {
 
   publicly_accessible = false
 
-  backup_retention_period = 7
+  backup_retention_period = var.backup_retention_period
   backup_window           = "03:00-04:00"
   maintenance_window      = "Mon:04:00-Mon:05:00"
 
   skip_final_snapshot = var.skip_final_snapshot
   deletion_protection = var.deletion_protection
 
-  performance_insights_enabled = true
-  create_monitoring_role       = true
-  monitoring_interval          = 60
+  performance_insights_enabled = var.performance_insights_enabled
+  create_monitoring_role       = var.monitoring_interval > 0
+  monitoring_interval          = var.monitoring_interval
 
   tags = var.tags
 }

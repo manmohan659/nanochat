@@ -62,7 +62,7 @@ resource "aws_iam_instance_profile" "eks_node" {
 ##############################################
 
 data "aws_iam_policy_document" "alb_irsa_assume" {
-  count = var.oidc_provider_arn == "" ? 0 : 1
+  count = var.create_alb_controller_irsa ? 1 : 0
 
   statement {
     actions = ["sts:AssumeRoleWithWebIdentity"]
@@ -84,21 +84,21 @@ data "aws_iam_policy_document" "alb_irsa_assume" {
 }
 
 resource "aws_iam_role" "alb_controller" {
-  count              = var.oidc_provider_arn == "" ? 0 : 1
+  count              = var.create_alb_controller_irsa ? 1 : 0
   name               = "${var.name_prefix}-alb-controller"
   assume_role_policy = data.aws_iam_policy_document.alb_irsa_assume[0].json
   tags               = var.tags
 }
 
 resource "aws_iam_policy" "alb_controller" {
-  count       = var.oidc_provider_arn == "" ? 0 : 1
+  count       = var.create_alb_controller_irsa ? 1 : 0
   name        = "${var.name_prefix}-alb-controller"
   description = "Permissions required by the AWS Load Balancer Controller."
   policy      = file("${path.module}/policies/alb_controller.json")
 }
 
 resource "aws_iam_role_policy_attachment" "alb_controller" {
-  count      = var.oidc_provider_arn == "" ? 0 : 1
+  count      = var.create_alb_controller_irsa ? 1 : 0
   role       = aws_iam_role.alb_controller[0].name
   policy_arn = aws_iam_policy.alb_controller[0].arn
 }

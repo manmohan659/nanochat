@@ -10,5 +10,5 @@ output "repository_arns" {
 
 output "registry_id" {
   description = "Account ID hosting the registry (same for all repos)."
-  value       = values(aws_ecr_repository.this)[0].registry_id
+  value       = try(values(aws_ecr_repository.this)[0].registry_id, "")
 }
