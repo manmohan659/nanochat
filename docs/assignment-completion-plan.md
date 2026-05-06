@@ -68,6 +68,13 @@ export JWT_PRIVATE_KEY_FILE=.secrets/jwt-private.pem
 export JWT_PUBLIC_KEY_FILE=.secrets/jwt-public.pem
 ```
 
+5. Configure GitHub repository secrets and variables:
+
+- `AWS_ROLE_ARN`: GitHub Actions OIDC role created by Terraform.
+- `AWS_REGION`: `us-west-2`.
+- `SEMANTIC_RELEASE_TOKEN` or `INFRA_REPO_PAT`: GitHub PAT used by semantic-release so generated `v*` tags trigger the production deployment workflow.
+- OAuth, Grafana OAuth, Slack, and runtime secrets used by `deploy.sh` and Helm secrets.
+
 ## Day 1 Provisioning
 
 Provision each environment through Terraform and Helm:
@@ -98,30 +105,46 @@ curl -Ik https://grafana.samosachaat.art
 
 ## CI/CD Promotion Flow
 
-1. Dev build:
+The GitHub Actions layout follows the same control pattern used in the SiPeKa repos: PR validation first, exact image tags for promotion, automated release creation from Conventional Commits, and smoke tests before each environment is considered promoted.
+
+1. PR checks:
+   - `.github/workflows/ci.yml` enforces Conventional Commits with commitlint.
+   - Service tests run only for changed paths.
+   - Docker images build locally in CI before a merge is allowed.
+   - Terraform environments validate when IaC files change.
+
+2. Dev build:
    - Merge to `master` or `main`.
    - `.github/workflows/build-dev.yml` builds and pushes `dev-<sha>` and `dev-latest`.
    - `.github/workflows/deploy-ec2.yml` remains for the old EC2 fallback, not the final grading path.
 
-2. Nightly QA:
+3. Nightly QA:
    - `.github/workflows/nightly.yml` runs on schedule or manually.
-   - Builds `qa-<run_id>` and `qa-latest`.
+   - Builds `qa-<sha>` and `qa-latest`.
    - Deploys to `samosachaat-qa` namespace on the QA cluster.
+   - Runs `scripts/smoke-test-k8s.sh samosachaat-qa` across frontend, auth, chat-api, and inference.
 
-3. QA to UAT:
-   - Push an `RC*` tag, or merge a PR to `master`/`main`.
-   - `.github/workflows/promote-uat.yml` re-tags `qa-latest` to `uat-RC*` or `uat-PR<number>-<sha>`.
-   - Helm deploys UAT with `--wait`.
+4. Dev/QA to UAT:
+   - PR merge path: successful `.github/workflows/build-dev.yml` completion promotes the exact `dev-<sha>` image set to UAT as `uat-merge-<sha>`.
+   - RC path: pushing an `RC*` tag promotes the latest smoke-tested `qa-latest` image set as `uat-RC*`.
+   - Manual recovery path: `workflow_dispatch` can promote a specific source tag such as `qa-<sha>` or `dev-<sha>`.
+   - Helm deploys UAT with `--wait`, then `scripts/smoke-test-k8s.sh samosachaat-uat` gates success.
 
 ```bash
 git tag RC1
 git push origin RC1
 ```
 
-4. UAT to production:
-   - Push a release tag such as `v1.0.1`.
-   - `.github/workflows/release-prod.yml` promotes the latest `uat-*` image to `prod-v1.0.1`.
-   - Prod uses Blue/Green: deploy inactive slot, smoke test it, then swap only the ALB Ingress target.
+5. Release creation:
+   - `.github/workflows/release.yml` runs semantic-release from Conventional Commits.
+   - semantic-release updates `CHANGELOG.md`, creates the GitHub release, and pushes `v*` release tags.
+   - Use `SEMANTIC_RELEASE_TOKEN` or `INFRA_REPO_PAT`; the default GitHub token will not trigger downstream workflows from a generated tag.
+
+6. UAT to production:
+   - Push a release tag such as `v1.0.1`, or let semantic-release create it.
+   - Prerelease tags such as `v1.0.1-rc.1` are excluded from the production workflow.
+   - `.github/workflows/release-prod.yml` promotes the latest consistent `uat-*` image set to `prod-v1.0.1`.
+   - Prod uses Blue/Green: deploy inactive slot, smoke test all services, then swap only the ALB Ingress target.
 
 ```bash
 git tag v1.0.1
@@ -230,9 +253,18 @@ kubectl logs -n samosachaat-prod deploy/chat-api --tail=100
 
 - Terraform: VPC, EKS, RDS, ECR, IAM, ACM, Route53, EFS, and state backend are Terraform-managed.
 - App/networking: 3+ microservices on EKS, RDS PostgreSQL, HTTPS custom domain, ALB Ingress.
-- CI/CD: dev build, nightly QA, RC/PR to UAT, `v*` release to prod.
+- CI/CD: PR commitlint/tests/Docker build, dev build, nightly QA smoke test, RC/build-success to UAT, semantic-release/`v*` release to prod.
 - Strategy: Blue/Green with inactive-slot smoke test and ingress swap.
 - Day 2 patching: `scripts/rotate-nodes.sh`.
 - Day 2 schema: Alembic Helm hook and `scripts/demo-schema-change.sh`.
 - Observability: Prometheus/Grafana/Alertmanager/Loki inside EKS, Grafana OAuth, Slack alerts.
 - Defense: use Grafana first, Loki second, Kubernetes events third.
+
+## What Is Still Operationally Pending
+
+- Run Terraform applies in AWS for dev, UAT, and prod.
+- Delegate GoDaddy DNS to the Terraform-created Route53 zone and complete ACM validation.
+- Configure GitHub repository secrets and environment protections.
+- Create GitHub/Google OAuth apps for Grafana and app login callback URLs.
+- Run one live end-to-end promotion: PR merge to UAT, RC tag to UAT, and `v*` tag to prod.
+- Record the silent Day 1/Day 2 videos, then narrate over them live during the presentation.
