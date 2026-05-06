@@ -135,6 +135,7 @@ ec2_down() {
 
 eks_deploy() {
     local ENV="${1:-dev}"
+    local APP_NAMESPACE="samosachaat-${ENV}"
     log "Provisioning EKS cluster (${ENV})... This takes ~15-20 minutes."
 
     cd "${SCRIPT_DIR}/terraform/environments/${ENV}"
@@ -158,13 +159,35 @@ eks_deploy() {
             warn "GitHub Actions role ARN not found; CI/CD will not be able to deploy to ${ENV} until github_actions_role_arn is applied."
         fi
     fi
+    local EXISTING_ALB_ARN="" EXISTING_ALB_DNS="" EXISTING_ALB_ZONE_ID=""
+    EXISTING_ALB_ARN="$(aws resourcegroupstaggingapi get-resources \
+        --region "${AWS_REGION}" \
+        --resource-type-filters elasticloadbalancing:loadbalancer \
+        --tag-filters "Key=ingress.k8s.aws/stack,Values=${APP_NAMESPACE}/samosachaat" \
+        --query 'ResourceTagMappingList[0].ResourceARN' \
+        --output text 2>/dev/null || true)"
+    if [ -n "${EXISTING_ALB_ARN}" ] && [ "${EXISTING_ALB_ARN}" != "None" ]; then
+        EXISTING_ALB_DNS="$(aws elbv2 describe-load-balancers \
+            --region "${AWS_REGION}" \
+            --load-balancer-arns "${EXISTING_ALB_ARN}" \
+            --query 'LoadBalancers[0].DNSName' \
+            --output text 2>/dev/null || true)"
+        EXISTING_ALB_ZONE_ID="$(aws elbv2 describe-load-balancers \
+            --region "${AWS_REGION}" \
+            --load-balancer-arns "${EXISTING_ALB_ARN}" \
+            --query 'LoadBalancers[0].CanonicalHostedZoneId' \
+            --output text 2>/dev/null || true)"
+        if [ -n "${EXISTING_ALB_DNS}" ] && [ "${EXISTING_ALB_DNS}" != "None" ] && \
+           [ -n "${EXISTING_ALB_ZONE_ID}" ] && [ "${EXISTING_ALB_ZONE_ID}" != "None" ]; then
+            TF_APPLY_ARGS+=("-var=alb_dns_name=${EXISTING_ALB_DNS}" "-var=alb_zone_id=${EXISTING_ALB_ZONE_ID}")
+        fi
+    fi
 
     log "Running terraform apply..."
     terraform apply "${TF_APPLY_ARGS[@]}"
 
     # Get cluster info
     local CLUSTER_NAME=$(terraform output -raw cluster_name 2>/dev/null || echo "samosachaat-${ENV}-eks")
-    local APP_NAMESPACE="samosachaat-${ENV}"
     local DB_ENDPOINT DB_HOST DB_PORT DB_PASSWORD DB_USER DB_NAME DATABASE_URL
     DB_ENDPOINT="$(terraform output -raw rds_endpoint)"
     DB_HOST="${DB_ENDPOINT%:*}"
@@ -334,6 +357,22 @@ eks_deploy() {
         fi
         sleep 15
     done
+    if [ -z "${ALB_HOST}" ]; then
+        local ALB_ARN=""
+        ALB_ARN="$(aws resourcegroupstaggingapi get-resources \
+            --region "${AWS_REGION}" \
+            --resource-type-filters elasticloadbalancing:loadbalancer \
+            --tag-filters "Key=ingress.k8s.aws/stack,Values=${APP_NAMESPACE}/samosachaat" \
+            --query 'ResourceTagMappingList[0].ResourceARN' \
+            --output text 2>/dev/null || true)"
+        if [ -n "${ALB_ARN}" ] && [ "${ALB_ARN}" != "None" ]; then
+            ALB_HOST="$(aws elbv2 describe-load-balancers \
+                --region "${AWS_REGION}" \
+                --load-balancer-arns "${ALB_ARN}" \
+                --query 'LoadBalancers[0].DNSName' \
+                --output text 2>/dev/null || true)"
+        fi
+    fi
     if [ -n "${ALB_HOST}" ]; then
         ALB_LOOKUP="${ALB_HOST#dualstack.}"
         ALB_ZONE_ID="$(aws elbv2 describe-load-balancers \
