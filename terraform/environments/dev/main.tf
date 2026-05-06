@@ -55,6 +55,24 @@ module "iam" {
   tags                = local.tags
 }
 
+resource "aws_eks_access_entry" "github_actions" {
+  cluster_name  = module.eks.cluster_name
+  principal_arn = module.iam.github_actions_role_arn
+  type          = "STANDARD"
+}
+
+resource "aws_eks_access_policy_association" "github_actions_admin" {
+  cluster_name  = module.eks.cluster_name
+  principal_arn = module.iam.github_actions_role_arn
+  policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+
+  access_scope {
+    type = "cluster"
+  }
+
+  depends_on = [aws_eks_access_entry.github_actions]
+}
+
 module "rds" {
   source = "../../modules/rds"
 
@@ -97,11 +115,12 @@ module "acm" {
 module "route53" {
   source = "../../modules/route53"
 
-  domain_name            = var.domain_name
-  subdomains             = ["grafana"]
-  acm_validation_records = module.acm.validation_records
-  # alb_dns_name / alb_zone_id are populated after the AWS Load Balancer
-  # Controller provisions the Ingress. Re-apply with -var to wire them up.
-  alb_dns_name = ""
-  alb_zone_id  = ""
+  domain_name              = var.domain_name
+  create_zone              = var.create_route53_zone
+  subdomains               = ["grafana"]
+  acm_validation_records   = module.acm.validation_records
+  acm_certificate_arn      = module.acm.certificate_arn
+  validate_acm_certificate = var.validate_acm_certificate
+  alb_dns_name             = var.alb_dns_name
+  alb_zone_id              = var.alb_zone_id
 }

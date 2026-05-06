@@ -179,7 +179,13 @@ jobs:
         run: terraform fmt -check -recursive
 
       - name: Terraform init (no backend)
-        run: terraform init -backend=false
+        run: |
+          for dir in bootstrap environments/dev environments/uat environments/prod; do
+            terraform -chdir="$dir" init -backend=false
+          done
 
       - name: Terraform validate
-        run: terraform validate
+        run: |
+          for dir in bootstrap environments/dev environments/uat environments/prod; do
+            terraform -chdir="$dir" validate
+          done

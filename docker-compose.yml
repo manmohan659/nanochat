@@ -52,7 +52,8 @@ services:
 
   chat-api:
     build:
-      context: ./services/chat-api
+      context: .
+      dockerfile: services/chat-api/Dockerfile
     restart: unless-stopped
     ports:
       - "${CHAT_API_PORT:-8002}:8002"

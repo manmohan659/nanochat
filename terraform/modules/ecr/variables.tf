@@ -2,10 +2,10 @@ variable "repository_names" {
   description = "ECR repositories to create."
   type        = list(string)
   default = [
-    "samosachaat-frontend",
-    "samosachaat-auth",
-    "samosachaat-chat-api",
-    "samosachaat-inference",
+    "samosachaat/frontend",
+    "samosachaat/auth",
+    "samosachaat/chat-api",
+    "samosachaat/inference",
   ]
 }
 

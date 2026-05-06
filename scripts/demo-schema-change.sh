@@ -11,7 +11,7 @@ echo "=== samosaChaat Day 2: Schema Change Demo ==="
 
 echo ""
 echo "Step 1: Current migration state"
-kubectl exec -n "$NAMESPACE" deploy/chat-api -- alembic current 2>/dev/null || \
+kubectl exec -n "$NAMESPACE" deploy/chat-api -- alembic -c db/alembic.ini current 2>/dev/null || \
   echo "(Could not connect — ensure chat-api pod is running)"
 
 echo ""
@@ -33,7 +33,7 @@ helm upgrade samosachaat helm/samosachaat -n "$NAMESPACE" --reuse-values
 
 echo ""
 echo "Step 4: Verify migration applied"
-kubectl exec -n "$NAMESPACE" deploy/chat-api -- alembic current
+kubectl exec -n "$NAMESPACE" deploy/chat-api -- alembic -c db/alembic.ini current
 
 echo ""
 echo "Step 5: Verify column exists in database"

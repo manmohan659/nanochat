@@ -47,13 +47,35 @@ module "ecr" {
 module "iam" {
   source = "../../modules/iam"
 
-  name_prefix         = local.name_prefix
-  oidc_provider_arn   = module.eks.oidc_provider_arn
-  oidc_provider_url   = module.eks.oidc_provider_url
+  name_prefix       = local.name_prefix
+  oidc_provider_arn = module.eks.oidc_provider_arn
+  oidc_provider_url = module.eks.oidc_provider_url
   # GitHub OIDC provider is created by the dev env (account-level resource).
   create_github_oidc  = false
   github_repositories = var.github_repositories
   tags                = local.tags
+}
+
+resource "aws_eks_access_entry" "github_actions" {
+  count = var.github_actions_role_arn == "" ? 0 : 1
+
+  cluster_name  = module.eks.cluster_name
+  principal_arn = var.github_actions_role_arn
+  type          = "STANDARD"
+}
+
+resource "aws_eks_access_policy_association" "github_actions_admin" {
+  count = var.github_actions_role_arn == "" ? 0 : 1
+
+  cluster_name  = module.eks.cluster_name
+  principal_arn = var.github_actions_role_arn
+  policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+
+  access_scope {
+    type = "cluster"
+  }
+
+  depends_on = [aws_eks_access_entry.github_actions]
 }
 
 module "rds" {
@@ -96,9 +118,12 @@ module "acm" {
 module "route53" {
   source = "../../modules/route53"
 
-  domain_name            = var.domain_name
-  subdomains             = ["grafana"]
-  acm_validation_records = module.acm.validation_records
-  alb_dns_name           = ""
-  alb_zone_id            = ""
+  domain_name              = var.domain_name
+  create_zone              = var.create_route53_zone
+  subdomains               = ["grafana"]
+  acm_validation_records   = module.acm.validation_records
+  acm_certificate_arn      = module.acm.certificate_arn
+  validate_acm_certificate = var.validate_acm_certificate
+  alb_dns_name             = var.alb_dns_name
+  alb_zone_id              = var.alb_zone_id
 }

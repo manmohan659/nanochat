@@ -31,6 +31,10 @@ log()  { echo -e "${GREEN}[samosaChaat]${NC} $1"; }
 warn() { echo -e "${YELLOW}[samosaChaat]${NC} $1"; }
 err()  { echo -e "${RED}[samosaChaat]${NC} $1" >&2; }
 
+urlencode() {
+    python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$1"
+}
+
 #─── EC2 MONOLITH ─────────────────────────────────────────────────────────────
 
 ec2_deploy() {
@@ -90,7 +94,7 @@ REMOTE_SCRIPT
         # Run DB migrations
         echo "Running database migrations..."
         sleep 5  # wait for postgres to be ready
-        docker compose exec -T chat-api alembic upgrade head 2>/dev/null || \
+        docker compose exec -T chat-api alembic -c db/alembic.ini upgrade head 2>/dev/null || \
             echo "Migrations skipped (may need manual .env setup)"
 
         echo ""
@@ -139,13 +143,123 @@ eks_deploy() {
     log "Running terraform init..."
     terraform init
 
+    local TF_APPLY_ARGS=(-auto-approve)
+    if [ "${ENV}" != "dev" ]; then
+        local GITHUB_ACTIONS_ROLE_ARN_VALUE="${GITHUB_ACTIONS_ROLE_ARN:-}"
+        if [ -z "${GITHUB_ACTIONS_ROLE_ARN_VALUE}" ]; then
+            GITHUB_ACTIONS_ROLE_ARN_VALUE="$(aws iam get-role \
+                --role-name samosachaat-dev-github-actions \
+                --query 'Role.Arn' \
+                --output text 2>/dev/null || true)"
+        fi
+        if [ -n "${GITHUB_ACTIONS_ROLE_ARN_VALUE}" ] && [ "${GITHUB_ACTIONS_ROLE_ARN_VALUE}" != "None" ]; then
+            TF_APPLY_ARGS+=("-var=github_actions_role_arn=${GITHUB_ACTIONS_ROLE_ARN_VALUE}")
+        else
+            warn "GitHub Actions role ARN not found; CI/CD will not be able to deploy to ${ENV} until github_actions_role_arn is applied."
+        fi
+    fi
+
     log "Running terraform apply..."
-    terraform apply -auto-approve
+    terraform apply "${TF_APPLY_ARGS[@]}"
 
     # Get cluster info
-    local CLUSTER_NAME=$(terraform output -raw eks_cluster_name 2>/dev/null || echo "samosachaat-${ENV}")
+    local CLUSTER_NAME=$(terraform output -raw cluster_name 2>/dev/null || echo "samosachaat-${ENV}-eks")
+    local APP_NAMESPACE="samosachaat-${ENV}"
+    local DB_ENDPOINT DB_HOST DB_PORT DB_PASSWORD DB_USER DB_NAME DATABASE_URL
+    DB_ENDPOINT="$(terraform output -raw rds_endpoint)"
+    DB_HOST="${DB_ENDPOINT%:*}"
+    DB_PORT="${DB_ENDPOINT##*:}"
+    DB_PASSWORD="$(terraform output -raw rds_password)"
+    DB_USER="samosachaat_admin"
+    DB_NAME="samosachaat"
+    DATABASE_URL="postgresql+asyncpg://$(urlencode "$DB_USER"):$(urlencode "$DB_PASSWORD")@${DB_HOST}:${DB_PORT}/${DB_NAME}"
+
+    local JWT_DIR JWT_PRIVATE_KEY_FILE_RESOLVED JWT_PUBLIC_KEY_FILE_RESOLVED
+    JWT_DIR="$(mktemp -d)"
+    JWT_PRIVATE_KEY_FILE_RESOLVED="${JWT_PRIVATE_KEY_FILE:-}"
+    JWT_PUBLIC_KEY_FILE_RESOLVED="${JWT_PUBLIC_KEY_FILE:-}"
+    if [ -n "${JWT_PRIVATE_KEY:-}" ]; then
+        JWT_PRIVATE_KEY_FILE_RESOLVED="${JWT_DIR}/jwt-private.pem"
+        printf '%s' "${JWT_PRIVATE_KEY}" > "${JWT_PRIVATE_KEY_FILE_RESOLVED}"
+    fi
+    if [ -n "${JWT_PUBLIC_KEY:-}" ]; then
+        JWT_PUBLIC_KEY_FILE_RESOLVED="${JWT_DIR}/jwt-public.pem"
+        printf '%s' "${JWT_PUBLIC_KEY}" > "${JWT_PUBLIC_KEY_FILE_RESOLVED}"
+    fi
+    if [ -z "${JWT_PRIVATE_KEY_FILE_RESOLVED}" ] || [ -z "${JWT_PUBLIC_KEY_FILE_RESOLVED}" ]; then
+        warn "JWT key files were not provided; generating demo keys for this deploy."
+        JWT_PRIVATE_KEY_FILE_RESOLVED="${JWT_DIR}/jwt-private.pem"
+        JWT_PUBLIC_KEY_FILE_RESOLVED="${JWT_DIR}/jwt-public.pem"
+        openssl genrsa -out "${JWT_PRIVATE_KEY_FILE_RESOLVED}" 2048 >/dev/null 2>&1
+        openssl rsa -in "${JWT_PRIVATE_KEY_FILE_RESOLVED}" -pubout -out "${JWT_PUBLIC_KEY_FILE_RESOLVED}" >/dev/null 2>&1
+    fi
+
+    local INTERNAL_API_KEY_VALUE SESSION_SECRET_VALUE
+    INTERNAL_API_KEY_VALUE="${INTERNAL_API_KEY:-$(openssl rand -hex 32)}"
+    SESSION_SECRET_VALUE="${SESSION_SECRET:-$(openssl rand -hex 32)}"
+
+    local K8S_APP_SECRET_ARGS=(
+        --from-literal="DATABASE_URL=${DATABASE_URL}"
+        --from-literal="AUTH_SERVICE_URL=http://auth:8001"
+        --from-literal="CHAT_API_URL=http://chat-api:8002"
+        --from-literal="AUTH_BASE_URL=https://${DOMAIN}/api"
+        --from-literal="FRONTEND_URL=https://${DOMAIN}"
+        --from-literal="COOKIE_SECURE=true"
+        --from-literal="COOKIE_DOMAIN=${DOMAIN}"
+        --from-literal="INTERNAL_API_KEY=${INTERNAL_API_KEY_VALUE}"
+        --from-literal="SESSION_SECRET=${SESSION_SECRET_VALUE}"
+        --from-file="JWT_PRIVATE_KEY=${JWT_PRIVATE_KEY_FILE_RESOLVED}"
+        --from-file="JWT_PUBLIC_KEY=${JWT_PUBLIC_KEY_FILE_RESOLVED}"
+    )
+    for secret_name in GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET INFERENCE_SERVICE_URL HF_TOKEN; do
+        secret_value="${!secret_name:-}"
+        if [ -n "${secret_value}" ]; then
+            K8S_APP_SECRET_ARGS+=(--from-literal="${secret_name}=${secret_value}")
+        fi
+    done
+
     log "Configuring kubectl for ${CLUSTER_NAME}..."
     aws eks update-kubeconfig --name "${CLUSTER_NAME}" --region ${AWS_REGION}
+    kubectl create namespace "${APP_NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
+    kubectl create secret generic samosachaat-secrets \
+        -n "${APP_NAMESPACE}" \
+        "${K8S_APP_SECRET_ARGS[@]}" \
+        --dry-run=client -o yaml | kubectl apply -f -
+
+    if [ -n "${SLACK_WEBHOOK_URL:-}" ]; then
+        kubectl create secret generic alertmanager-slack-webhook \
+            -n "${APP_NAMESPACE}" \
+            --from-literal=url="${SLACK_WEBHOOK_URL}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+    else
+        warn "SLACK_WEBHOOK_URL is not set; Alertmanager Slack notifications need this secret before the observability stack is installed."
+        kubectl create secret generic alertmanager-slack-webhook \
+            -n "${APP_NAMESPACE}" \
+            --from-literal=url="https://hooks.slack.com/services/REPLACE/ME/NOW" \
+            --dry-run=client -o yaml | kubectl apply -f -
+    fi
+
+    if [ -n "${GITHUB_GRAFANA_CLIENT_ID:-}" ] && [ -n "${GITHUB_GRAFANA_CLIENT_SECRET:-}" ] && \
+       [ -n "${GOOGLE_GRAFANA_CLIENT_ID:-}" ] && [ -n "${GOOGLE_GRAFANA_CLIENT_SECRET:-}" ]; then
+        kubectl create secret generic grafana-oauth-secrets \
+            -n "${APP_NAMESPACE}" \
+            --from-literal=GITHUB_GRAFANA_CLIENT_ID="${GITHUB_GRAFANA_CLIENT_ID}" \
+            --from-literal=GITHUB_GRAFANA_CLIENT_SECRET="${GITHUB_GRAFANA_CLIENT_SECRET}" \
+            --from-literal=GOOGLE_GRAFANA_CLIENT_ID="${GOOGLE_GRAFANA_CLIENT_ID}" \
+            --from-literal=GOOGLE_GRAFANA_CLIENT_SECRET="${GOOGLE_GRAFANA_CLIENT_SECRET}" \
+            --from-literal=SLACK_WEBHOOK_URL="${SLACK_WEBHOOK_URL:-}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+    else
+        warn "Grafana OAuth env vars are incomplete; set GitHub/Google Grafana OAuth vars before installing observability for the final demo."
+        kubectl create secret generic grafana-oauth-secrets \
+            -n "${APP_NAMESPACE}" \
+            --from-literal=GITHUB_GRAFANA_CLIENT_ID="${GITHUB_GRAFANA_CLIENT_ID:-}" \
+            --from-literal=GITHUB_GRAFANA_CLIENT_SECRET="${GITHUB_GRAFANA_CLIENT_SECRET:-}" \
+            --from-literal=GOOGLE_GRAFANA_CLIENT_ID="${GOOGLE_GRAFANA_CLIENT_ID:-}" \
+            --from-literal=GOOGLE_GRAFANA_CLIENT_SECRET="${GOOGLE_GRAFANA_CLIENT_SECRET:-}" \
+            --from-literal=SLACK_WEBHOOK_URL="${SLACK_WEBHOOK_URL:-}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+    fi
 
     # Install ALB Ingress Controller
     log "Installing ALB Ingress Controller..."
@@ -156,32 +270,93 @@ eks_deploy() {
         --set clusterName="${CLUSTER_NAME}" \
         --set serviceAccount.create=true \
         --set serviceAccount.name=aws-load-balancer-controller \
+        --set "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn=$(terraform output -raw alb_controller_role_arn)" \
         --wait --timeout 5m 2>/dev/null || warn "ALB controller may need IRSA setup"
 
     # Deploy observability stack
     log "Deploying observability stack..."
     helm dependency build "${SCRIPT_DIR}/helm/observability" 2>/dev/null || true
     helm upgrade --install observability "${SCRIPT_DIR}/helm/observability" \
-        --namespace monitoring --create-namespace \
+        --namespace "${APP_NAMESPACE}" --create-namespace \
         --wait --timeout 10m 2>/dev/null || warn "Observability deploy needs review"
 
     # Deploy samosaChaat
     local VALUES_FILE="${SCRIPT_DIR}/helm/samosachaat/values-${ENV}.yaml"
     log "Deploying samosaChaat to EKS..."
-    helm upgrade --install samosachaat "${SCRIPT_DIR}/helm/samosachaat" \
-        -f "${VALUES_FILE}" \
-        --set global.imageRegistry="${ECR_REGISTRY}" \
-        --set global.imageTag="dev-latest" \
-        --set ingress.acmCertArn="$(terraform output -raw acm_certificate_arn 2>/dev/null || echo '')" \
-        --namespace samosachaat --create-namespace \
-        --wait --timeout 10m
+    if [ "${ENV}" = "prod" ]; then
+        helm upgrade --install samosachaat-traffic "${SCRIPT_DIR}/helm/samosachaat" \
+            -f "${VALUES_FILE}" \
+            --set frontend.enabled=false \
+            --set auth.enabled=false \
+            --set chatApi.enabled=false \
+            --set inference.enabled=false \
+            --set dbMigrate.enabled=false \
+            --set ingress.enabled=false \
+            --set ingress.targetSlot=blue \
+            --set secrets.create=false \
+            --namespace "${APP_NAMESPACE}" --create-namespace \
+            --wait --timeout 10m
+        helm upgrade --install samosachaat-blue "${SCRIPT_DIR}/helm/samosachaat" \
+            -f "${VALUES_FILE}" \
+            --set global.imageRegistry="${ECR_REGISTRY}" \
+            --set global.imageTag="dev-latest" \
+            --set deployment.slot=blue \
+            --set ingress.enabled=false \
+            --set namespace.create=false \
+            --set configMap.create=false \
+            --set secrets.create=false \
+            --namespace "${APP_NAMESPACE}" --create-namespace \
+            --wait --timeout 15m
+        helm upgrade samosachaat-traffic "${SCRIPT_DIR}/helm/samosachaat" \
+            --reuse-values \
+            --set ingress.enabled=true \
+            --set ingress.targetSlot=blue \
+            --set ingress.acmCertArn="$(terraform output -raw acm_certificate_arn 2>/dev/null || echo '')" \
+            --namespace "${APP_NAMESPACE}" \
+            --wait --timeout 10m
+    else
+        helm upgrade --install samosachaat "${SCRIPT_DIR}/helm/samosachaat" \
+            -f "${VALUES_FILE}" \
+            --set global.imageRegistry="${ECR_REGISTRY}" \
+            --set global.imageTag="dev-latest" \
+            --set ingress.acmCertArn="$(terraform output -raw acm_certificate_arn 2>/dev/null || echo '')" \
+            --set secrets.create=false \
+            --namespace "${APP_NAMESPACE}" --create-namespace \
+            --wait --timeout 10m
+    fi
+
+    log "Resolving ALB address and reconciling Route53 aliases with Terraform..."
+    local ALB_HOST="" ALB_LOOKUP="" ALB_ZONE_ID=""
+    for _ in {1..40}; do
+        ALB_HOST="$(kubectl get ingress samosachaat -n "${APP_NAMESPACE}" -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)"
+        if [ -n "${ALB_HOST}" ]; then
+            break
+        fi
+        sleep 15
+    done
+    if [ -n "${ALB_HOST}" ]; then
+        ALB_LOOKUP="${ALB_HOST#dualstack.}"
+        ALB_ZONE_ID="$(aws elbv2 describe-load-balancers \
+            --region "${AWS_REGION}" \
+            --query "LoadBalancers[?DNSName=='${ALB_LOOKUP}'].CanonicalHostedZoneId | [0]" \
+            --output text 2>/dev/null || true)"
+        if [ -n "${ALB_ZONE_ID}" ] && [ "${ALB_ZONE_ID}" != "None" ]; then
+            terraform apply "${TF_APPLY_ARGS[@]}" \
+                -var="alb_dns_name=${ALB_LOOKUP}" \
+                -var="alb_zone_id=${ALB_ZONE_ID}"
+        else
+            warn "Could not resolve ALB hosted-zone ID for ${ALB_LOOKUP}; Route53 alias was not updated."
+        fi
+    else
+        warn "Ingress did not publish an ALB hostname yet; Route53 alias was not updated."
+    fi
 
     echo ""
     log "EKS deploy complete!"
     log "  Cluster: ${CLUSTER_NAME}"
-    kubectl get pods -n samosachaat
+    kubectl get pods -n "${APP_NAMESPACE}"
     echo ""
-    kubectl get ingress -n samosachaat 2>/dev/null || true
+    kubectl get ingress -n "${APP_NAMESPACE}" 2>/dev/null || true
 }
 
 eks_down() {
@@ -191,12 +366,16 @@ eks_down() {
     cd "${SCRIPT_DIR}/terraform/environments/${ENV}"
 
     # Remove Helm releases first (cleans up ALB, etc.)
-    local CLUSTER_NAME=$(terraform output -raw eks_cluster_name 2>/dev/null || echo "samosachaat-${ENV}")
+    local CLUSTER_NAME=$(terraform output -raw cluster_name 2>/dev/null || echo "samosachaat-${ENV}-eks")
+    local APP_NAMESPACE="samosachaat-${ENV}"
     aws eks update-kubeconfig --name "${CLUSTER_NAME}" --region ${AWS_REGION} 2>/dev/null || true
 
     log "Removing Helm releases..."
-    helm uninstall samosachaat -n samosachaat 2>/dev/null || true
-    helm uninstall observability -n monitoring 2>/dev/null || true
+    helm uninstall samosachaat -n "${APP_NAMESPACE}" 2>/dev/null || true
+    helm uninstall samosachaat-traffic -n "${APP_NAMESPACE}" 2>/dev/null || true
+    helm uninstall samosachaat-blue -n "${APP_NAMESPACE}" 2>/dev/null || true
+    helm uninstall samosachaat-green -n "${APP_NAMESPACE}" 2>/dev/null || true
+    helm uninstall observability -n "${APP_NAMESPACE}" 2>/dev/null || true
     helm uninstall aws-load-balancer-controller -n kube-system 2>/dev/null || true
 
     # Destroy infrastructure
@@ -226,7 +405,9 @@ show_status() {
     echo "EKS Cluster:"
     if kubectl get nodes 2>/dev/null; then
         echo ""
-        kubectl get pods -n samosachaat 2>/dev/null || echo "  No samosachaat namespace."
+        for ns in samosachaat-dev samosachaat-uat samosachaat-prod; do
+            kubectl get pods -n "$ns" 2>/dev/null || true
+        done
     else
         echo "  No EKS cluster configured."
     fi

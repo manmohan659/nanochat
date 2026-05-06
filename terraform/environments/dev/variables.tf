@@ -16,6 +16,30 @@ variable "domain_name" {
   default     = "samosachaat.art"
 }
 
+variable "create_route53_zone" {
+  description = "Create the public Route53 hosted zone for domain_name. Set false if the hosted zone already exists in this AWS account."
+  type        = bool
+  default     = true
+}
+
+variable "alb_dns_name" {
+  description = "ALB DNS name for Route53 alias records. Filled by the Day 1 deploy script after the Ingress creates the ALB."
+  type        = string
+  default     = ""
+}
+
+variable "alb_zone_id" {
+  description = "ALB canonical hosted-zone ID for Route53 alias records. Filled by the Day 1 deploy script after the Ingress creates the ALB."
+  type        = string
+  default     = ""
+}
+
+variable "validate_acm_certificate" {
+  description = "Wait for ACM DNS validation. Enable after the registrar delegates domain_name to the Route53 name servers."
+  type        = bool
+  default     = false
+}
+
 variable "github_repositories" {
   description = "GitHub repos that may assume the CI role."
   type        = list(string)

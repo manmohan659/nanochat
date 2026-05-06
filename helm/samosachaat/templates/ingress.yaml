@@ -1,7 +1,8 @@
 {{- if .Values.ingress.enabled -}}
-{{- $frontendSvc := include "samosachaat.svcName" (dict "root" . "svc" "frontend") -}}
-{{- $authSvc := include "samosachaat.svcName" (dict "root" . "svc" "auth") -}}
-{{- $chatApiSvc := include "samosachaat.svcName" (dict "root" . "svc" "chat-api") -}}
+{{- $targetSlot := default .Values.deployment.slot .Values.ingress.targetSlot -}}
+{{- $frontendSvc := include "samosachaat.svcNameForSlot" (dict "svc" "frontend" "slot" $targetSlot) -}}
+{{- $authSvc := include "samosachaat.svcNameForSlot" (dict "svc" "auth" "slot" $targetSlot) -}}
+{{- $chatApiSvc := include "samosachaat.svcNameForSlot" (dict "svc" "chat-api" "slot" $targetSlot) -}}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -15,6 +16,8 @@ metadata:
     alb.ingress.kubernetes.io/target-type: ip
     alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
     alb.ingress.kubernetes.io/ssl-redirect: "443"
+    alb.ingress.kubernetes.io/load-balancer-attributes: idle_timeout.timeout_seconds=120
+    alb.ingress.kubernetes.io/target-group-attributes: deregistration_delay.timeout_seconds=30
     {{- with .Values.ingress.acmCertArn }}
     alb.ingress.kubernetes.io/certificate-arn: {{ . | quote }}
     {{- end }}

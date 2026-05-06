@@ -30,6 +30,12 @@ class Conversation(Base):
     )
     title: Mapped[str] = mapped_column(sa.String(500), nullable=False, default="New conversation")
     model_tag: Mapped[str] = mapped_column(sa.String(100), nullable=False, default="default")
+    is_favorited: Mapped[bool] = mapped_column(
+        sa.Boolean(),
+        nullable=False,
+        default=False,
+        server_default=sa.text("false"),
+    )
     created_at: Mapped[datetime] = mapped_column(
         sa.DateTime(timezone=True),
         default=_utcnow,
@@ -55,6 +61,7 @@ class Conversation(Base):
             "user_id": str(self.user_id),
             "title": self.title,
             "model_tag": self.model_tag,
+            "is_favorited": self.is_favorited,
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }

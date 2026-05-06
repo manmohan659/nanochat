@@ -1,6 +1,12 @@
 variable "domain_name" {
-  description = "Apex domain (e.g. samosachaat.art). A hosted zone for this domain must already exist."
+  description = "Apex domain (e.g. samosachaat.art)."
   type        = string
+}
+
+variable "create_zone" {
+  description = "Create the public hosted zone. Set false to use an existing Route53 hosted zone."
+  type        = bool
+  default     = true
 }
 
 variable "subdomains" {
@@ -29,4 +35,16 @@ variable "acm_validation_records" {
     record = string
   }))
   default = {}
+}
+
+variable "acm_certificate_arn" {
+  description = "ACM certificate ARN to validate after DNS validation records are created. Empty skips validation."
+  type        = string
+  default     = ""
+}
+
+variable "validate_acm_certificate" {
+  description = "Wait for ACM DNS validation. Enable only after the domain is delegated to this Route53 zone."
+  type        = bool
+  default     = false
 }
