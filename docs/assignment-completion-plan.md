@@ -173,6 +173,7 @@ Zero dropped requests are supported by:
 The EKS managed node group reads the latest EKS-optimized AMI ID from SSM. Re-running Terraform updates the launch template and triggers managed node rotation.
 
 ```bash
+export GITHUB_ACTIONS_ROLE_ARN=arn:aws:iam::883107058766:role/samosachaat-dev-github-actions
 ./scripts/rotate-nodes.sh prod
 ```
 
@@ -196,7 +197,7 @@ kubectl get pods -n samosachaat-prod -o wide -w
 Migration `004_add_favorited.py` adds `conversations.is_favorited`.
 
 ```bash
-./scripts/demo-schema-change.sh samosachaat-prod
+./scripts/demo-schema-change.sh samosachaat-prod blue
 ```
 
 Narration points:

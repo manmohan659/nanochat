@@ -2,16 +2,28 @@
 set -euo pipefail
 
 # Day 2 Demo: Apply schema change (migration 004 — add is_favorited) with zero downtime.
-# Usage: ./scripts/demo-schema-change.sh <namespace>
-# Example: ./scripts/demo-schema-change.sh samosachaat-prod
+# Usage: ./scripts/demo-schema-change.sh <namespace> [blue|green]
+# Example: ./scripts/demo-schema-change.sh samosachaat-prod blue
 
-NAMESPACE="${1:?Usage: demo-schema-change.sh <namespace>}"
+NAMESPACE="${1:?Usage: demo-schema-change.sh <namespace> [blue|green]}"
+SLOT="${2:-}"
+SUFFIX=""
+if [[ -n "$SLOT" ]]; then
+  if [[ ! "$SLOT" =~ ^(blue|green)$ ]]; then
+    echo "Unsupported slot: $SLOT" >&2
+    exit 2
+  fi
+  SUFFIX="-$SLOT"
+fi
+
+RELEASE="samosachaat${SUFFIX}"
+CHAT_API_DEPLOYMENT="chat-api${SUFFIX}"
 
 echo "=== samosaChaat Day 2: Schema Change Demo ==="
 
 echo ""
 echo "Step 1: Current migration state"
-kubectl exec -n "$NAMESPACE" deploy/chat-api -- alembic -c db/alembic.ini current 2>/dev/null || \
+kubectl exec -n "$NAMESPACE" "deploy/$CHAT_API_DEPLOYMENT" -- alembic -c db/alembic.ini current 2>/dev/null || \
   echo "(Could not connect — ensure chat-api pod is running)"
 
 echo ""
@@ -28,16 +40,16 @@ echo "  - New pods (with updated SQLAlchemy model) can use it immediately"
 echo "Step 3: Apply migration via Helm upgrade"
 echo "The db-migrate-job.yaml Helm hook runs 'alembic upgrade head' before new pods start."
 echo ""
-echo "Running: helm upgrade samosachaat helm/samosachaat -n $NAMESPACE --reuse-values"
-helm upgrade samosachaat helm/samosachaat -n "$NAMESPACE" --reuse-values
+echo "Running: helm upgrade $RELEASE helm/samosachaat -n $NAMESPACE --reuse-values"
+helm upgrade "$RELEASE" helm/samosachaat -n "$NAMESPACE" --reuse-values
 
 echo ""
 echo "Step 4: Verify migration applied"
-kubectl exec -n "$NAMESPACE" deploy/chat-api -- alembic -c db/alembic.ini current
+kubectl exec -n "$NAMESPACE" "deploy/$CHAT_API_DEPLOYMENT" -- alembic -c db/alembic.ini current
 
 echo ""
 echo "Step 5: Verify column exists in database"
-kubectl exec -n "$NAMESPACE" deploy/chat-api -- python -c "
+kubectl exec -n "$NAMESPACE" "deploy/$CHAT_API_DEPLOYMENT" -- python -c "
 from sqlalchemy import inspect, create_engine
 import os
 url = os.environ.get('DATABASE_URL', '').replace('+asyncpg', '')
