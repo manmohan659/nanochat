@@ -33,12 +33,14 @@
         "elasticloadbalancing:DescribeLoadBalancers",
         "elasticloadbalancing:DescribeLoadBalancerAttributes",
         "elasticloadbalancing:DescribeListeners",
+        "elasticloadbalancing:DescribeListenerAttributes",
         "elasticloadbalancing:DescribeListenerCertificates",
         "elasticloadbalancing:DescribeSSLPolicies",
         "elasticloadbalancing:DescribeRules",
         "elasticloadbalancing:DescribeTargetGroups",
         "elasticloadbalancing:DescribeTargetGroupAttributes",
         "elasticloadbalancing:DescribeTargetHealth",
+        "elasticloadbalancing:DescribeCapacityReservation",
         "elasticloadbalancing:DescribeTags"
       ],
       "Resource": "*"
@@ -232,8 +234,10 @@
       "Action": [
         "elasticloadbalancing:SetWebAcl",
         "elasticloadbalancing:ModifyListener",
+        "elasticloadbalancing:ModifyListenerAttributes",
         "elasticloadbalancing:AddListenerCertificates",
         "elasticloadbalancing:RemoveListenerCertificates",
+        "elasticloadbalancing:ModifyCapacityReservation",
         "elasticloadbalancing:ModifyRule"
       ],
       "Resource": "*"
