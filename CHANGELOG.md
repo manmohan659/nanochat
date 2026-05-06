@@ -1,3 +1,10 @@
+## [1.0.5](https://github.com/manmohan659/nanochat/compare/v1.0.4...v1.0.5) (2026-05-06)
+
+
+### Bug Fixes
+
+* **devops:** unblock ALB and prod release flow ([e4eeb7e](https://github.com/manmohan659/nanochat/commit/e4eeb7e72e0225d85186b7e37d48510a2970caf0))
+
 ## [1.0.4](https://github.com/manmohan659/nanochat/compare/v1.0.3...v1.0.4) (2026-05-06)
 
 
