@@ -1,8 +1,9 @@
 {{- if .Values.dbMigrate.enabled }}
+{{- $jobName := include "samosachaat.svcName" (dict "root" . "svc" "db-migrate") }}
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: samosachaat-db-migrate
+  name: {{ $jobName }}
   namespace: {{ include "samosachaat.namespace" . }}
   labels:
     {{- include "samosachaat.labels" . | nindent 4 }}

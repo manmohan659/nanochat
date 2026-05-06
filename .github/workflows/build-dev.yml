@@ -19,7 +19,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service: [frontend, auth, chat-api, inference]
+        include:
+          - service: frontend
+            context: services/frontend
+            dockerfile: services/frontend/Dockerfile
+          - service: auth
+            context: services/auth
+            dockerfile: services/auth/Dockerfile
+          - service: chat-api
+            context: .
+            dockerfile: services/chat-api/Dockerfile
+          - service: inference
+            context: services/inference
+            dockerfile: services/inference/Dockerfile
     steps:
       - uses: actions/checkout@v4
 
@@ -27,7 +39,7 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
-          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+          aws-region: ${{ vars.AWS_REGION || 'us-west-2' }}
 
       - name: Login to Amazon ECR
         id: ecr-login
@@ -39,8 +51,8 @@ jobs:
       - name: Build & push image
         uses: docker/build-push-action@v6
         with:
-          context: services/${{ matrix.service }}
-          file: services/${{ matrix.service }}/Dockerfile
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
           push: true
           tags: |
             ${{ steps.ecr-login.outputs.registry }}/samosachaat/${{ matrix.service }}:dev-${{ github.sha }}

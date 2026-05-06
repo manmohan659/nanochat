@@ -8,10 +8,22 @@ terraform {
   }
 }
 
-# Use an existing hosted zone (created out-of-band when registering the domain).
+resource "aws_route53_zone" "this" {
+  count = var.create_zone ? 1 : 0
+
+  name = var.domain_name
+}
+
 data "aws_route53_zone" "this" {
+  count = var.create_zone ? 0 : 1
+
   name         = var.domain_name
   private_zone = false
+}
+
+locals {
+  zone_id      = var.create_zone ? aws_route53_zone.this[0].zone_id : data.aws_route53_zone.this[0].zone_id
+  name_servers = var.create_zone ? aws_route53_zone.this[0].name_servers : data.aws_route53_zone.this[0].name_servers
 }
 
 # alb_dns_name / alb_zone_id come from the AWS Load Balancer Controller after the
@@ -20,7 +32,7 @@ data "aws_route53_zone" "this" {
 resource "aws_route53_record" "apex" {
   count = var.alb_dns_name == "" ? 0 : 1
 
-  zone_id = data.aws_route53_zone.this.zone_id
+  zone_id = local.zone_id
   name    = var.domain_name
   type    = "A"
 
@@ -34,7 +46,7 @@ resource "aws_route53_record" "apex" {
 resource "aws_route53_record" "subdomains" {
   for_each = var.alb_dns_name == "" ? toset([]) : toset(var.subdomains)
 
-  zone_id = data.aws_route53_zone.this.zone_id
+  zone_id = local.zone_id
   name    = "${each.key}.${var.domain_name}"
   type    = "A"
 
@@ -49,10 +61,17 @@ resource "aws_route53_record" "subdomains" {
 resource "aws_route53_record" "acm_validation" {
   for_each = var.acm_validation_records
 
-  zone_id         = data.aws_route53_zone.this.zone_id
+  zone_id         = local.zone_id
   name            = each.value.name
   type            = each.value.type
   records         = [each.value.record]
   ttl             = 60
   allow_overwrite = true
+}
+
+resource "aws_acm_certificate_validation" "this" {
+  count = !var.validate_acm_certificate || var.acm_certificate_arn == "" || length(var.acm_validation_records) == 0 ? 0 : 1
+
+  certificate_arn         = var.acm_certificate_arn
+  validation_record_fqdns = [for record in aws_route53_record.acm_validation : record.fqdn]
 }

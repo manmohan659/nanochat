@@ -39,6 +39,13 @@ Usage:  {{ include "samosachaat.svcName" (dict "root" . "svc" "frontend") }}
 {{- $root := .root -}}
 {{- $svc := .svc -}}
 {{- $slot := default "" $root.Values.deployment.slot -}}
+{{- include "samosachaat.svcNameForSlot" (dict "svc" $svc "slot" $slot) -}}
+{{- end -}}
+
+{{/* Compose a service-specific name for an explicit blue/green slot. */}}
+{{- define "samosachaat.svcNameForSlot" -}}
+{{- $svc := .svc -}}
+{{- $slot := default "" .slot -}}
 {{- if $slot -}}
 {{- printf "%s-%s" $svc $slot | trunc 63 | trimSuffix "-" -}}
 {{- else -}}

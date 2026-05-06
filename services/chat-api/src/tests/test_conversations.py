@@ -24,12 +24,14 @@ async def test_create_and_list_conversation(client, seeded_user):
     convo = create.json()
     assert convo["title"] == "my first chat"
     assert convo["user_id"] == seeded_user["id"]
+    assert convo["is_favorited"] is False
 
     listed = await client.get("/api/conversations", headers=headers)
     assert listed.status_code == 200
     payload = listed.json()
     assert len(payload["items"]) == 1
     assert payload["items"][0]["id"] == convo["id"]
+    assert payload["items"][0]["is_favorited"] is False
     assert payload["grouped"]  # at least one date bucket
 
 

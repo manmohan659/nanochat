@@ -74,7 +74,7 @@ jobs:
 
             # Run migrations (wait for postgres)
             sleep 8
-            docker compose exec -T chat-api alembic upgrade head 2>/dev/null || true
+            docker compose exec -T chat-api alembic -c db/alembic.ini upgrade head 2>/dev/null || true
 
             echo "Deploy complete!"
             docker compose -f docker-compose.yml -f docker-compose.prod.yml ps

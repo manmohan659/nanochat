@@ -4,6 +4,9 @@ on:
   push:
     tags:
       - 'RC*'
+  pull_request:
+    branches: [master, main]
+    types: [closed]
 
 concurrency:
   group: promote-uat
@@ -14,14 +17,15 @@ permissions:
   contents: read
 
 env:
-  AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
-  UAT_CLUSTER: samosachaat-uat
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-west-2' }}
+  UAT_CLUSTER: samosachaat-uat-eks
   UAT_NAMESPACE: samosachaat-uat
   SERVICES: frontend auth chat-api inference
 
 jobs:
   promote:
-    name: Re-tag dev → uat and deploy
+    name: Re-tag QA → UAT and deploy
+    if: github.event_name == 'push' || github.event.pull_request.merged == true
     runs-on: ubuntu-latest
     environment: uat
     steps:
@@ -29,7 +33,14 @@ jobs:
 
       - name: Resolve tag
         id: tag
-        run: echo "name=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+            echo "name=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            short_sha="$(git rev-parse --short HEAD)"
+            echo "name=PR${{ github.event.pull_request.number }}-${short_sha}" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
@@ -41,10 +52,10 @@ jobs:
         id: ecr-login
         uses: aws-actions/amazon-ecr-login@v2
 
-      - name: Re-tag dev images as uat-${{ steps.tag.outputs.name }}
+      - name: Re-tag QA images as uat-${{ steps.tag.outputs.name }}
         env:
           REGISTRY: ${{ steps.ecr-login.outputs.registry }}
-          SRC_REF: dev-latest
+          SRC_REF: qa-latest
           DST_REF: uat-${{ steps.tag.outputs.name }}
         run: |
           set -euo pipefail
@@ -78,6 +89,7 @@ jobs:
           helm upgrade --install samosachaat helm/samosachaat \
             -f helm/samosachaat/values-uat.yaml \
             --set global.imageTag=uat-${{ steps.tag.outputs.name }} \
+            --set secrets.create=false \
             --namespace "$UAT_NAMESPACE" \
             --create-namespace \
             --wait --timeout 10m

@@ -14,8 +14,8 @@ permissions:
   contents: read
 
 env:
-  AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
-  PROD_CLUSTER: samosachaat-prod
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-west-2' }}
+  PROD_CLUSTER: samosachaat-prod-eks
   PROD_NAMESPACE: samosachaat-prod
   SERVICES: frontend auth chat-api inference
 
@@ -51,8 +51,8 @@ jobs:
             repo="samosachaat/${svc}"
             src=$(aws ecr describe-images \
               --repository-name "$repo" \
-              --query 'sort_by(imageDetails,&imagePushedAt)[?starts_with(imageTags[0], `uat-`)]|[-1].imageTags[0]' \
-              --output text)
+              --query 'sort_by(imageDetails[?imageTags!=`null`],&imagePushedAt)[].imageTags[]' \
+              --output text | tr '\t' '\n' | grep '^uat-' | tail -1 || true)
             if [ -z "$src" ] || [ "$src" = "None" ]; then
               echo "No uat-* image found for $repo" >&2
               exit 1
@@ -80,40 +80,63 @@ jobs:
         with:
           version: 'v3.16.2'
 
-      - name: Deploy green slot
+      - name: Select candidate slot
+        id: slot
         run: |
-          helm upgrade --install samosachaat-green helm/samosachaat \
+          set -euo pipefail
+          current=$(helm get values samosachaat-traffic -n "$PROD_NAMESPACE" -o json 2>/dev/null \
+            | jq -r '.ingress.targetSlot // "blue"' || echo "blue")
+          if [ "$current" = "green" ]; then
+            candidate="blue"
+          else
+            candidate="green"
+          fi
+          echo "current=$current" >> "$GITHUB_OUTPUT"
+          echo "candidate=$candidate" >> "$GITHUB_OUTPUT"
+
+      - name: Verify traffic release exists
+        run: |
+          helm status samosachaat-traffic -n "$PROD_NAMESPACE" >/dev/null
+
+      - name: Deploy candidate slot
+        run: |
+          helm upgrade --install samosachaat-${{ steps.slot.outputs.candidate }} helm/samosachaat \
             -f helm/samosachaat/values-prod.yaml \
             --set global.imageTag=prod-${{ steps.tag.outputs.name }} \
-            --set deployment.slot=green \
+            --set deployment.slot=${{ steps.slot.outputs.candidate }} \
             --set ingress.enabled=false \
+            --set namespace.create=false \
+            --set configMap.create=false \
+            --set secrets.create=false \
             --namespace "$PROD_NAMESPACE" \
             --create-namespace \
             --wait --timeout 15m
 
-      - name: Smoke test green
+      - name: Smoke test candidate
         run: |
           set -euo pipefail
-          kubectl -n "$PROD_NAMESPACE" rollout status deploy/frontend-green --timeout=5m
+          candidate=${{ steps.slot.outputs.candidate }}
+          kubectl -n "$PROD_NAMESPACE" rollout status deploy/frontend-${candidate} --timeout=5m
           kubectl -n "$PROD_NAMESPACE" run smoke-${{ github.run_id }} \
             --rm -i --restart=Never \
             --image=curlimages/curl:8.10.1 \
             --command -- curl -fsS --max-time 10 \
-            http://frontend-green.${PROD_NAMESPACE}.svc.cluster.local:3000/health
+            http://frontend-${candidate}.${PROD_NAMESPACE}.svc.cluster.local:3000/api/health
 
-      - name: Swap ingress → green
+      - name: Swap ingress to candidate
         run: |
-          helm upgrade --install samosachaat helm/samosachaat \
-            -f helm/samosachaat/values-prod.yaml \
-            --set global.imageTag=prod-${{ steps.tag.outputs.name }} \
-            --set deployment.slot=green \
-            --set ingress.enabled=true \
+          helm upgrade samosachaat-traffic helm/samosachaat \
+            --reuse-values \
+            --set ingress.targetSlot=${{ steps.slot.outputs.candidate }} \
             --namespace "$PROD_NAMESPACE" \
             --wait --timeout 10m
 
-      - name: Retain blue as rollback standby
+      - name: Retain previous slot as rollback standby
         run: |
-          echo "Blue slot retained for rollback. To roll back:"
-          echo "  helm upgrade samosachaat helm/samosachaat \\"
-          echo "    -f helm/samosachaat/values-prod.yaml \\"
-          echo "    --set deployment.slot=blue --namespace $PROD_NAMESPACE"
+          echo "Active slot: ${{ steps.slot.outputs.candidate }}"
+          echo "Rollback slot: ${{ steps.slot.outputs.current }}"
+          echo "To roll back:"
+          echo "  helm upgrade samosachaat-traffic helm/samosachaat \\"
+          echo "    --reuse-values \\"
+          echo "    --set ingress.targetSlot=${{ steps.slot.outputs.current }} \\"
+          echo "    --namespace $PROD_NAMESPACE"

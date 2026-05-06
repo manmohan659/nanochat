@@ -37,7 +37,7 @@ fi
 
 echo ""
 echo "Step 3: Monitor node rotation"
-CLUSTER_NAME=$(terraform output -raw eks_cluster_name 2>/dev/null || echo "samosachaat-$ENVIRONMENT")
+CLUSTER_NAME=$(terraform output -raw cluster_name 2>/dev/null || echo "samosachaat-$ENVIRONMENT-eks")
 aws eks update-kubeconfig --name "$CLUSTER_NAME" --region us-west-2 2>/dev/null || true
 echo "Watching nodes (Ctrl+C to stop):"
 kubectl get nodes -w

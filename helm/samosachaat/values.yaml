@@ -18,6 +18,9 @@ config:
   LOG_LEVEL: "info"
   ENVIRONMENT: "dev"
 
+configMap:
+  create: true
+
 ## Secret names/values. Values here are placeholders; real values should come
 ## from --set-file or an external secret manager.
 secrets:
@@ -36,6 +39,7 @@ frontend:
     repository: samosachaat/frontend
   replicaCount: 1
   port: 3000
+  healthPath: /api/health
   resources:
     requests:
       cpu: 100m
@@ -54,6 +58,7 @@ auth:
     repository: samosachaat/auth
   replicaCount: 1
   port: 8001
+  healthPath: /auth/health
   resources:
     requests:
       cpu: 100m
@@ -71,6 +76,7 @@ chatApi:
     repository: samosachaat/chat-api
   replicaCount: 1
   port: 8002
+  healthPath: /api/health
   resources:
     requests:
       cpu: 200m
@@ -91,6 +97,7 @@ inference:
     repository: samosachaat/inference
   replicaCount: 1
   port: 8003
+  healthPath: /health
   resources:
     requests:
       cpu: 500m
@@ -111,6 +118,8 @@ ingress:
   host: samosachaat.art
   grafanaHost: grafana.samosachaat.art
   acmCertArn: ""
+  ## Blue/green traffic target. Empty means "use deployment.slot".
+  targetSlot: ""
   grafanaServiceName: grafana
   grafanaServicePort: 3000
 
@@ -126,6 +135,6 @@ dbMigrate:
   ## service but the image build for chat-api also includes migrations.
   image:
     repository: samosachaat/chat-api
-  command: ["alembic", "upgrade", "head"]
+  command: ["alembic", "-c", "db/alembic.ini", "upgrade", "head"]
   workingDir: /app
   env: {}

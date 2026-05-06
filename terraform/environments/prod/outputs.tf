@@ -59,6 +59,11 @@ output "route53_zone_id" {
   value       = module.route53.zone_id
 }
 
+output "route53_name_servers" {
+  description = "Authoritative Route53 name servers to configure at the registrar."
+  value       = module.route53.name_servers
+}
+
 output "alb_controller_role_arn" {
   description = "IRSA role ARN for the AWS Load Balancer Controller."
   value       = module.iam.alb_controller_role_arn
