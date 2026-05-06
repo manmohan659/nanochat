@@ -1,3 +1,10 @@
+## [1.0.1](https://github.com/manmohan659/nanochat/compare/v1.0.0...v1.0.1) (2026-05-06)
+
+
+### Bug Fixes
+
+* **eks:** stabilize live helm ingress rollout ([43a366c](https://github.com/manmohan659/nanochat/commit/43a366ce4f1bec2c3f06fa05d4840b7814083371))
+
 # 1.0.0 (2026-05-06)
 
 
