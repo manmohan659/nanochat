@@ -301,15 +301,12 @@ eks_deploy() {
     fi
 
     local GRAFANA_OAUTH_READY="false"
-    if [ -n "${GITHUB_GRAFANA_CLIENT_ID:-}" ] && [ -n "${GITHUB_GRAFANA_CLIENT_SECRET:-}" ] && \
-       [ -n "${GOOGLE_GRAFANA_CLIENT_ID:-}" ] && [ -n "${GOOGLE_GRAFANA_CLIENT_SECRET:-}" ]; then
+    if [ -n "${GITHUB_GRAFANA_CLIENT_ID:-}" ] && [ -n "${GITHUB_GRAFANA_CLIENT_SECRET:-}" ]; then
         GRAFANA_OAUTH_READY="true"
         kubectl create secret generic grafana-oauth-secrets \
             -n "${APP_NAMESPACE}" \
             --from-literal=GITHUB_GRAFANA_CLIENT_ID="${GITHUB_GRAFANA_CLIENT_ID}" \
             --from-literal=GITHUB_GRAFANA_CLIENT_SECRET="${GITHUB_GRAFANA_CLIENT_SECRET}" \
-            --from-literal=GOOGLE_GRAFANA_CLIENT_ID="${GOOGLE_GRAFANA_CLIENT_ID}" \
-            --from-literal=GOOGLE_GRAFANA_CLIENT_SECRET="${GOOGLE_GRAFANA_CLIENT_SECRET}" \
             --from-literal=SLACK_WEBHOOK_URL="${SLACK_WEBHOOK_URL:-}" \
             --dry-run=client -o yaml | kubectl apply -f -
     else
@@ -340,7 +337,7 @@ eks_deploy() {
             --namespace "${APP_NAMESPACE}" --create-namespace \
             --wait --timeout 10m
     else
-        warn "Observability stack was not installed. Set SLACK_WEBHOOK_URL plus Grafana GitHub/Google OAuth vars, then rerun ./deploy.sh eks ${ENV}."
+        warn "Observability stack was not installed. Set SLACK_WEBHOOK_URL plus Grafana GitHub OAuth vars, then rerun ./deploy.sh eks ${ENV}."
     fi
 
     # Deploy samosaChaat

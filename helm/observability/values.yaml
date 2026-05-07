@@ -88,7 +88,7 @@ kube-prometheus-stack:
       datasources:
         defaultDatasourceEnabled: false
 
-    ## OAuth2 — no username/password, only GitHub + Google sign-in.
+    ## OAuth2 — no username/password, only GitHub sign-in.
     ## The referenced env vars must be provided via Grafana's extraEnvVarsSecret
     ## (see grafana.envFromSecret below) or set in the cluster's secret store.
     grafana.ini:
@@ -105,19 +105,9 @@ kube-prometheus-stack:
         auth_url: https://github.com/login/oauth/authorize
         token_url: https://github.com/login/oauth/access_token
         api_url: https://api.github.com/user
-      "auth.google":
-        enabled: true
-        allow_sign_up: true
-        client_id: ${GOOGLE_GRAFANA_CLIENT_ID}
-        client_secret: ${GOOGLE_GRAFANA_CLIENT_SECRET}
-        scopes: openid email profile
-        auth_url: https://accounts.google.com/o/oauth2/auth
-        token_url: https://accounts.google.com/o/oauth2/token
-        allowed_domains: gmail.com
-
     ## OAuth client IDs/secrets come from a Kubernetes secret mounted as env.
     ## Expected keys: GITHUB_GRAFANA_CLIENT_ID, GITHUB_GRAFANA_CLIENT_SECRET,
-    ## GOOGLE_GRAFANA_CLIENT_ID, GOOGLE_GRAFANA_CLIENT_SECRET, SLACK_WEBHOOK_URL.
+    ## SLACK_WEBHOOK_URL.
     envFromSecret: grafana-oauth-secrets
 
     ## Datasources — Prometheus (default) + Loki for logs.
