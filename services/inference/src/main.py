@@ -6,13 +6,13 @@ import random
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
-from fastapi import Depends, FastAPI, HTTPException, Request, status
+from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse, StreamingResponse
 from prometheus_fastapi_instrumentator import Instrumentator
 from pydantic import BaseModel
 
 from config import Settings, get_settings
-from logging_setup import configure_logging, get_logger
+from logging_setup import configure_logging, get_logger, new_trace_id, set_trace_id, set_user_id
 from middleware.internal_auth import require_internal_api_key
 from services.weight_manager import WeightManager
 
@@ -250,6 +250,28 @@ def create_app(settings: Settings | None = None, runtime: InferenceRuntime | Non
         await resolved_runtime.shutdown()
 
     app = FastAPI(title="nanochat inference service", version="0.1.0", lifespan=lifespan)
+
+    @app.middleware("http")
+    async def request_context(request: Request, call_next) -> Response:
+        incoming = request.headers.get("x-trace-id") or request.headers.get("x-request-id")
+        trace_id = incoming or new_trace_id()
+        set_trace_id(trace_id)
+        set_user_id(None)
+
+        logger.info("request_start", method=request.method, path=request.url.path)
+        try:
+            response = await call_next(request)
+        except Exception:
+            logger.exception("request_failed", method=request.method, path=request.url.path)
+            raise
+        response.headers["x-trace-id"] = trace_id
+        logger.info(
+            "request_end",
+            method=request.method,
+            path=request.url.path,
+            status_code=response.status_code,
+        )
+        return response
 
     @app.post("/generate", dependencies=[Depends(require_internal_api_key)])
     async def generate(request_body: GenerateRequest, runtime: InferenceRuntime = Depends(get_runtime)):

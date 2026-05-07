@@ -15,7 +15,7 @@ from cachetools import TTLCache
 from fastapi import Depends, Header, HTTPException, Request, status
 
 from ..config import Settings, get_settings
-from ..logging_setup import get_logger, set_user_id
+from ..logging_setup import get_logger, get_trace_id, set_user_id
 
 logger = get_logger(__name__)
 
@@ -86,9 +86,14 @@ async def _validate_with_auth_service(
     owns_client = http_client is None
     client = http_client or httpx.AsyncClient(timeout=5.0)
     try:
+        headers = {"X-Internal-API-Key": settings.internal_api_key}
+        trace_id = get_trace_id()
+        if trace_id:
+            headers["x-trace-id"] = trace_id
+
         response = await client.post(
             f"{settings.auth_service_url.rstrip('/')}/auth/validate",
-            headers={"X-Internal-API-Key": settings.internal_api_key},
+            headers=headers,
             json={"token": token},
         )
     except httpx.HTTPError as exc:

@@ -57,8 +57,6 @@ Usage:  {{ include "samosachaat.svcName" (dict "root" . "svc" "frontend") }}
 {{- define "samosachaat.selectorLabels" -}}
 {{- $root := .root -}}
 {{- $svc := .svc -}}
-app.kubernetes.io/name: {{ $svc }}
-app.kubernetes.io/instance: {{ $root.Release.Name }}
 app.kubernetes.io/component: {{ $svc }}
 {{- with $root.Values.deployment.slot }}
 app.kubernetes.io/slot: {{ . }}

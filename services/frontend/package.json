@@ -14,7 +14,8 @@
     "framer-motion": "^11.11.8",
     "highlight.js": "^11.10.0",
     "lucide-react": "^0.451.0",
-    "next": "14.2.15",
+    "next": "^15.5.15",
+    "pino": "^9.14.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-markdown": "^9.0.1",
@@ -28,9 +29,12 @@
     "@types/react-dom": "^18.3.0",
     "autoprefixer": "^10.4.20",
     "eslint": "^8.57.1",
-    "eslint-config-next": "14.2.15",
-    "postcss": "^8.4.47",
+    "eslint-config-next": "^15.5.15",
+    "postcss": "^8.5.14",
     "tailwindcss": "^3.4.13",
     "typescript": "^5.6.2"
+  },
+  "overrides": {
+    "postcss": "^8.5.14"
   }
 }

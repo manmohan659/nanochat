@@ -15,6 +15,7 @@ permissions:
 
 env:
   AWS_REGION: ${{ vars.AWS_REGION || 'us-west-2' }}
+  # QA runs in the shared non-prod cluster with its own namespace and logical DB.
   QA_CLUSTER: ${{ vars.QA_CLUSTER || 'samosachaat-dev-eks' }}
   QA_NAMESPACE: samosachaat-qa
   IMAGE_TAG: qa-${{ github.sha }}

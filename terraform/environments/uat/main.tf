@@ -8,6 +8,17 @@ locals {
   }
 }
 
+data "terraform_remote_state" "nonprod" {
+  backend = "s3"
+
+  config = {
+    bucket  = "samosachaat-terraform-state-906352610196"
+    key     = "envs/dev/terraform.tfstate"
+    region  = "us-west-2"
+    encrypt = true
+  }
+}
+
 module "vpc" {
   source = "../../modules/vpc"
 
@@ -80,22 +91,6 @@ resource "aws_eks_access_policy_association" "github_actions_admin" {
   }
 
   depends_on = [aws_eks_access_entry.github_actions]
-}
-
-module "rds" {
-  source = "../../modules/rds"
-
-  identifier                 = "${local.name_prefix}-pg"
-  vpc_id                     = module.vpc.vpc_id
-  private_subnet_ids         = module.vpc.private_subnet_ids
-  eks_node_security_group_id = module.eks.node_security_group_id
-
-  instance_class      = "db.t3.micro"
-  multi_az            = false
-  skip_final_snapshot = true
-  deletion_protection = false
-
-  tags = local.tags
 }
 
 module "efs" {

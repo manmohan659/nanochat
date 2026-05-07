@@ -7,6 +7,7 @@ from typing import AsyncIterator
 import httpx
 
 from ..config import Settings, get_settings
+from ..logging_setup import get_trace_id
 
 
 class InferenceClient:
@@ -27,7 +28,11 @@ class InferenceClient:
 
     @property
     def headers(self) -> dict[str, str]:
-        return {"X-Internal-API-Key": self._settings.internal_api_key}
+        headers = {"X-Internal-API-Key": self._settings.internal_api_key}
+        trace_id = get_trace_id()
+        if trace_id:
+            headers["x-trace-id"] = trace_id
+        return headers
 
     def _get_client(self) -> httpx.AsyncClient:
         if self._client is None:

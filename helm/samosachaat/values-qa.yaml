@@ -1,4 +1,4 @@
-## QA overrides — nightly integration environment on EKS.
+## QA overrides — cost-aware nightly integration gate on shared non-prod EKS.
 
 global:
   imageTag: qa-latest
@@ -11,17 +11,27 @@ config:
   LOG_LEVEL: "info"
 
 frontend:
-  replicaCount: 2
+  replicaCount: 1
   resources:
     requests:
-      cpu: 100m
-      memory: 256Mi
+      cpu: 50m
+      memory: 128Mi
     limits:
-      cpu: 500m
-      memory: 512Mi
+      cpu: 250m
+      memory: 256Mi
 
 auth:
-  replicaCount: 2
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+chatApi:
+  replicaCount: 1
   resources:
     requests:
       cpu: 100m
@@ -29,31 +39,20 @@ auth:
     limits:
       cpu: 500m
       memory: 512Mi
-
-chatApi:
-  replicaCount: 2
-  resources:
-    requests:
-      cpu: 200m
-      memory: 512Mi
-    limits:
-      cpu: '1'
-      memory: 1Gi
   hpa:
     enabled: false
 
 inference:
-  replicaCount: 2
+  replicaCount: 1
   resources:
     requests:
-      cpu: 500m
-      memory: 1Gi
+      cpu: 250m
+      memory: 512Mi
     limits:
-      cpu: '2'
-      memory: 4Gi
+      cpu: '1'
+      memory: 2Gi
   hpa:
     enabled: false
 
 pdb:
-  enabled: true
-  minAvailable: 1
+  enabled: false

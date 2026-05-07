@@ -21,4 +21,4 @@ COPY src /app/src
 
 EXPOSE 8003
 
-CMD ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8003"]
+CMD ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8003", "--no-access-log"]

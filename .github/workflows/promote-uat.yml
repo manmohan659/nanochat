@@ -29,7 +29,9 @@ permissions:
 
 env:
   AWS_REGION: ${{ vars.AWS_REGION || 'us-west-2' }}
-  UAT_CLUSTER: samosachaat-uat-eks
+  # UAT runs as a logically isolated namespace on the shared non-prod EKS/RDS
+  # tier. Production remains physically isolated on its own cluster and RDS.
+  UAT_CLUSTER: samosachaat-dev-eks
   UAT_NAMESPACE: samosachaat-uat
   SERVICES: frontend auth chat-api inference
 

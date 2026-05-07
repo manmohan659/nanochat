@@ -32,9 +32,10 @@ locals {
 resource "aws_route53_record" "apex" {
   count = var.alb_dns_name == "" ? 0 : 1
 
-  zone_id = local.zone_id
-  name    = var.domain_name
-  type    = "A"
+  zone_id         = local.zone_id
+  name            = var.domain_name
+  type            = "A"
+  allow_overwrite = true
 
   alias {
     name                   = var.alb_dns_name
@@ -46,9 +47,10 @@ resource "aws_route53_record" "apex" {
 resource "aws_route53_record" "subdomains" {
   for_each = var.alb_dns_name == "" ? toset([]) : toset(var.subdomains)
 
-  zone_id = local.zone_id
-  name    = "${each.key}.${var.domain_name}"
-  type    = "A"
+  zone_id         = local.zone_id
+  name            = "${each.key}.${var.domain_name}"
+  type            = "A"
+  allow_overwrite = true
 
   alias {
     name                   = var.alb_dns_name

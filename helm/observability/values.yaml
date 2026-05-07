@@ -157,23 +157,27 @@ kube-prometheus-stack:
     dashboardsConfigMaps:
       samosachaat: samosachaat-dashboards
 
-    ## Unified alerting — contact points (email + slack).
+    ## Unified alerting — Slack-only contact point. The URL is expanded from
+    ## grafana-oauth-secrets, so no SMTP placeholder is required for the demo.
     alerting:
       contactpoints.yaml:
         apiVersion: 1
         contactPoints:
           - orgId: 1
-            name: email-alerts
+            name: slack-alerts
             receivers:
-              - uid: email
-                type: email
+              - uid: slack
+                type: slack
                 settings:
-                  addresses: manmohan659@gmail.com
+                  url: ${SLACK_WEBHOOK_URL}
+                  recipient: "#alerts"
+                  title: "samosaChaat alert"
+                  text: "Open Grafana at https://grafana.samosachaat.art for details."
       policies.yaml:
         apiVersion: 1
         policies:
           - orgId: 1
-            receiver: email-alerts
+            receiver: slack-alerts
             group_by: [alertname, severity]
 
     resources:
@@ -309,7 +313,7 @@ loki-stack:
                 - __meta_kubernetes_pod_name
               target_label: pod
             - source_labels:
-                - __meta_kubernetes_pod_label_app_kubernetes_io_name
+                - __meta_kubernetes_pod_label_app_kubernetes_io_component
               target_label: app
             - source_labels:
                 - __meta_kubernetes_pod_label_app_kubernetes_io_component

@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { getTraceId, logger, logRouteError, textWithTrace, upstreamHeaders } from '@/lib/logger';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -18,13 +19,10 @@ function sseEvent(data: Record<string, unknown>) {
   return encoder.encode(`data: ${JSON.stringify(data)}\n\n`);
 }
 
-async function proxyUpstream(body: unknown, upstreamUrl: string, authHeader: string | null) {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (authHeader) headers['Authorization'] = authHeader;
-
+async function proxyUpstream(body: unknown, upstreamUrl: string, req: NextRequest, traceId: string) {
   const upstream = await fetch(upstreamUrl, {
     method: 'POST',
-    headers,
+    headers: upstreamHeaders(req, traceId),
     body: JSON.stringify(body),
   });
 
@@ -37,11 +35,12 @@ async function proxyUpstream(body: unknown, upstreamUrl: string, authHeader: str
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache, no-transform',
       Connection: 'keep-alive',
+      'x-trace-id': upstream.headers.get('x-trace-id') || traceId,
     },
   });
 }
 
-function mockEcho(body: StreamBody): Response {
+function mockEcho(body: StreamBody, traceId: string): Response {
   const last = body.messages[body.messages.length - 1]?.content ?? '';
   const greetings = [
     'Namaste! ',
@@ -69,26 +68,30 @@ function mockEcho(body: StreamBody): Response {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache, no-transform',
       Connection: 'keep-alive',
+      'x-trace-id': traceId,
     },
   });
 }
 
 export async function POST(req: NextRequest) {
+  const traceId = getTraceId(req);
+  logger.info({ trace_id: traceId, path: req.nextUrl.pathname }, 'stream_request_start');
+
   let body: StreamBody;
   try {
     body = (await req.json()) as StreamBody;
   } catch {
-    return new Response('Invalid JSON', { status: 400 });
+    return textWithTrace('Invalid JSON', { status: 400 }, traceId);
   }
 
   const upstream = process.env.CHAT_API_URL;
-  const authHeader = req.headers.get('authorization');
+  const hasAuth = Boolean(req.headers.get('authorization'));
 
   if (upstream) {
     try {
       // If we have a conversationId and auth, use the persisted messages endpoint
       const convId = body.conversationId;
-      if (convId && authHeader) {
+      if (convId && hasAuth) {
         // Chat-api expects {content, temperature, max_tokens, top_k}
         // Extract the last user message as the content
         const lastUserMsg = [...body.messages].reverse().find(m => m.role === 'user');
@@ -99,21 +102,23 @@ export async function POST(req: NextRequest) {
           top_k: body.topK,
         };
         return await proxyUpstream(
-          chatApiBody as any,
+          chatApiBody,
           `${upstream.replace(/\/$/, '')}/api/conversations/${convId}/messages`,
-          authHeader,
+          req,
+          traceId,
         );
       }
       // Fallback to direct chat completions (no persistence)
       return await proxyUpstream(
         body,
         `${upstream.replace(/\/$/, '')}/chat/completions`,
-        authHeader,
+        req,
+        traceId,
       );
     } catch (err) {
-      console.warn('[chat/stream] upstream failed, falling back to mock:', err);
+      logRouteError('stream_upstream_failed_using_mock', err, traceId);
     }
   }
 
-  return mockEcho(body);
+  return mockEcho(body, traceId);
 }

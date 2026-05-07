@@ -50,15 +50,31 @@ kubectl exec -n "$NAMESPACE" "deploy/$CHAT_API_DEPLOYMENT" -- alembic -c db/alem
 echo ""
 echo "Step 5: Verify column exists in database"
 kubectl exec -n "$NAMESPACE" "deploy/$CHAT_API_DEPLOYMENT" -- python -c "
-from sqlalchemy import inspect, create_engine
+import asyncio
 import os
-url = os.environ.get('DATABASE_URL', '').replace('+asyncpg', '')
+import asyncpg
+
+url = os.environ.get('DATABASE_URL', '').replace('postgresql+asyncpg://', 'postgresql://')
 if not url:
     print('DATABASE_URL not set')
     exit(1)
-engine = create_engine(url)
-cols = [c['name'] for c in inspect(engine).get_columns('conversations')]
-print(f'Columns: {cols}')
-assert 'is_favorited' in cols, 'FAIL: is_favorited not found!'
-print('SUCCESS: is_favorited column present and migration is complete.')
+
+async def main():
+    conn = await asyncpg.connect(url)
+    try:
+        rows = await conn.fetch(\"\"\"
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'conversations'
+            ORDER BY ordinal_position
+        \"\"\")
+    finally:
+        await conn.close()
+    cols = [row['column_name'] for row in rows]
+    print(f'Columns: {cols}')
+    assert 'is_favorited' in cols, 'FAIL: is_favorited not found!'
+    print('SUCCESS: is_favorited column present and migration is complete.')
+
+asyncio.run(main())
 "

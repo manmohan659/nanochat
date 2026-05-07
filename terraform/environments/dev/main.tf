@@ -1,6 +1,11 @@
 locals {
   name_prefix  = "samosachaat-${var.environment}"
   cluster_name = "${local.name_prefix}-eks"
+  nonprod_database_names = {
+    dev = "samosachaat_dev"
+    qa  = "samosachaat_qa"
+    uat = "samosachaat_uat"
+  }
 
   tags = {
     Project     = "samosachaat"
@@ -79,17 +84,23 @@ resource "aws_eks_access_policy_association" "github_actions_admin" {
 module "rds" {
   source = "../../modules/rds"
 
-  identifier                 = "${local.name_prefix}-pg"
+  identifier                 = "samosachaat-nonprod-pg"
+  supporting_resource_name   = "${local.name_prefix}-pg"
   vpc_id                     = module.vpc.vpc_id
   private_subnet_ids         = module.vpc.private_subnet_ids
   eks_node_security_group_id = module.eks.node_security_group_id
 
   instance_class      = "db.t3.micro"
   multi_az            = false
+  apply_immediately   = true
   skip_final_snapshot = true
   deletion_protection = false
 
-  tags = local.tags
+  tags = merge(local.tags, {
+    Environment   = "nonprod"
+    Isolation     = "logical-databases"
+    DatabaseNames = join("/", values(local.nonprod_database_names))
+  })
 }
 
 module "efs" {
