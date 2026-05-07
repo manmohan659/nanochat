@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/manmohan659/nanochat/compare/v1.1.7...v1.2.0) (2026-05-07)
+
+
+### Features
+
+* **devops:** add public dev and uat URLs ([2bcba97](https://github.com/manmohan659/nanochat/commit/2bcba974482175d2ab779910e5a7c61dc61777e1))
+
 ## [1.1.6](https://github.com/manmohan659/nanochat/compare/v1.1.5...v1.1.6) (2026-05-07)
 
 
