@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/manmohan659/nanochat/compare/v1.0.5...v1.1.0) (2026-05-07)
+
+
+### Features
+
+* **observability:** propagate session trace context ([7dac66d](https://github.com/manmohan659/nanochat/commit/7dac66d2e8919f14584980decae6eae7d07c90d3))
+
 ## [1.0.5](https://github.com/manmohan659/nanochat/compare/v1.0.4...v1.0.5) (2026-05-06)
 
 
