@@ -1,5 +1,12 @@
 import { NextRequest } from 'next/server';
-import { getTraceId, logger, logRouteError, textWithTrace, upstreamHeaders } from '@/lib/logger';
+import {
+  getSessionTraceId,
+  getTraceId,
+  logger,
+  logRouteError,
+  textWithTrace,
+  upstreamHeaders,
+} from '@/lib/logger';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -19,7 +26,13 @@ function sseEvent(data: Record<string, unknown>) {
   return encoder.encode(`data: ${JSON.stringify(data)}\n\n`);
 }
 
-async function proxyUpstream(body: unknown, upstreamUrl: string, req: NextRequest, traceId: string) {
+async function proxyUpstream(
+  body: unknown,
+  upstreamUrl: string,
+  req: NextRequest,
+  traceId: string,
+  sessionTraceId: string | null,
+) {
   const upstream = await fetch(upstreamUrl, {
     method: 'POST',
     headers: upstreamHeaders(req, traceId),
@@ -36,11 +49,12 @@ async function proxyUpstream(body: unknown, upstreamUrl: string, req: NextReques
       'Cache-Control': 'no-cache, no-transform',
       Connection: 'keep-alive',
       'x-trace-id': upstream.headers.get('x-trace-id') || traceId,
+      ...(sessionTraceId ? { 'x-session-trace-id': sessionTraceId } : {}),
     },
   });
 }
 
-function mockEcho(body: StreamBody, traceId: string): Response {
+function mockEcho(body: StreamBody, traceId: string, sessionTraceId: string | null): Response {
   const last = body.messages[body.messages.length - 1]?.content ?? '';
   const greetings = [
     'Namaste! ',
@@ -69,19 +83,24 @@ function mockEcho(body: StreamBody, traceId: string): Response {
       'Cache-Control': 'no-cache, no-transform',
       Connection: 'keep-alive',
       'x-trace-id': traceId,
+      ...(sessionTraceId ? { 'x-session-trace-id': sessionTraceId } : {}),
     },
   });
 }
 
 export async function POST(req: NextRequest) {
   const traceId = getTraceId(req);
-  logger.info({ trace_id: traceId, path: req.nextUrl.pathname }, 'stream_request_start');
+  const sessionTraceId = getSessionTraceId(req);
+  logger.info(
+    { trace_id: traceId, session_trace_id: sessionTraceId, path: req.nextUrl.pathname },
+    'stream_request_start',
+  );
 
   let body: StreamBody;
   try {
     body = (await req.json()) as StreamBody;
   } catch {
-    return textWithTrace('Invalid JSON', { status: 400 }, traceId);
+    return textWithTrace('Invalid JSON', { status: 400 }, traceId, sessionTraceId);
   }
 
   const upstream = process.env.CHAT_API_URL;
@@ -89,12 +108,9 @@ export async function POST(req: NextRequest) {
 
   if (upstream) {
     try {
-      // If we have a conversationId and auth, use the persisted messages endpoint
       const convId = body.conversationId;
       if (convId && hasAuth) {
-        // Chat-api expects {content, temperature, max_tokens, top_k}
-        // Extract the last user message as the content
-        const lastUserMsg = [...body.messages].reverse().find(m => m.role === 'user');
+        const lastUserMsg = [...body.messages].reverse().find((m) => m.role === 'user');
         const chatApiBody = {
           content: lastUserMsg?.content ?? '',
           temperature: body.temperature,
@@ -106,19 +122,22 @@ export async function POST(req: NextRequest) {
           `${upstream.replace(/\/$/, '')}/api/conversations/${convId}/messages`,
           req,
           traceId,
+          sessionTraceId,
         );
       }
-      // Fallback to direct chat completions (no persistence)
       return await proxyUpstream(
         body,
         `${upstream.replace(/\/$/, '')}/chat/completions`,
         req,
         traceId,
+        sessionTraceId,
       );
     } catch (err) {
-      logRouteError('stream_upstream_failed_using_mock', err, traceId);
+      logRouteError('stream_upstream_failed_using_mock', err, traceId, {
+        session_trace_id: sessionTraceId,
+      });
     }
   }
 
-  return mockEcho(body, traceId);
+  return mockEcho(body, traceId, sessionTraceId);
 }

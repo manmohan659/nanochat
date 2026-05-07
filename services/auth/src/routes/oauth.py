@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
 from ..database import get_session
+from ..logging_setup import set_user_id
 from ..rate_limit import limiter
 from ..services import github_oauth as github_provider
 from ..services import google_oauth as google_provider
@@ -72,6 +73,7 @@ async def google_callback(
 
     profile = google_provider.profile_from_userinfo(dict(userinfo))
     user = await user_service.upsert_from_oauth(session, profile)
+    set_user_id(str(user.id))
 
     jwt_service = JWTService()
     pair = jwt_service.issue_pair(user_id=str(user.id), email=user.email, name=user.name)
@@ -117,6 +119,7 @@ async def github_callback(
 
     profile = github_provider.profile_from_userinfo(dict(userinfo), emails)
     user = await user_service.upsert_from_oauth(session, profile)
+    set_user_id(str(user.id))
 
     jwt_service = JWTService()
     pair = jwt_service.issue_pair(user_id=str(user.id), email=user.email, name=user.name)

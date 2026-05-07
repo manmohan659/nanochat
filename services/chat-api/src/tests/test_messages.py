@@ -82,6 +82,77 @@ async def test_send_message_streams_and_persists(app, client, seeded_user):
 
 @pytest.mark.asyncio
 @respx.mock
+async def test_send_message_forwards_trace_context_without_browser_auth(app, client, seeded_user):
+    captured_auth_headers: dict[str, str | None] = {}
+    captured_inference_headers: dict[str, str | None] = {}
+
+    def auth_handler(request: httpx.Request) -> httpx.Response:
+        captured_auth_headers["trace"] = request.headers.get("x-trace-id")
+        captured_auth_headers["session_trace"] = request.headers.get("x-session-trace-id")
+        return httpx.Response(
+            200,
+            json={
+                "valid": True,
+                "user": seeded_user,
+                "claims": {"sub": seeded_user["id"]},
+            },
+        )
+
+    async def inference_handler(request: httpx.Request) -> httpx.Response:
+        captured_inference_headers["trace"] = request.headers.get("x-trace-id")
+        captured_inference_headers["session_trace"] = request.headers.get("x-session-trace-id")
+        captured_inference_headers["user_id"] = request.headers.get("x-user-id")
+        captured_inference_headers["authorization"] = request.headers.get("authorization")
+
+        async def body():
+            yield b'data: {"token":"ok","gpu":0}\n\n'
+            yield b'data: {"done":true}\n\n'
+
+        return httpx.Response(
+            200,
+            headers={"content-type": "text/event-stream"},
+            content=body(),
+        )
+
+    respx.mock.post("http://auth.test/auth/validate").mock(side_effect=auth_handler)
+    headers = {
+        "Authorization": "Bearer valid-token",
+        "x-trace-id": "trace-defense-123",
+        "x-session-trace-id": "session-defense-456",
+    }
+
+    create = await client.post("/api/conversations", json={}, headers=headers)
+    assert create.status_code == 201
+    convo_id = create.json()["id"]
+
+    app.state.inference_http_client = httpx.AsyncClient(
+        transport=httpx.MockTransport(inference_handler)
+    )
+    try:
+        resp = await client.post(
+            f"/api/conversations/{convo_id}/messages",
+            json={"content": "hi there"},
+            headers=headers,
+        )
+    finally:
+        await app.state.inference_http_client.aclose()
+
+    assert resp.status_code == 200
+    assert resp.headers["x-session-trace-id"] == "session-defense-456"
+    assert captured_auth_headers == {
+        "trace": "trace-defense-123",
+        "session_trace": "session-defense-456",
+    }
+    assert captured_inference_headers == {
+        "trace": "trace-defense-123",
+        "session_trace": "session-defense-456",
+        "user_id": seeded_user["id"],
+        "authorization": None,
+    }
+
+
+@pytest.mark.asyncio
+@respx.mock
 async def test_send_message_rejected_on_foreign_conversation(
     app, client, seeded_user, other_user
 ):

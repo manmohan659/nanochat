@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
 from ..database import get_session
+from ..logging_setup import set_user_id
 from ..rate_limit import limiter
 from ..services import user_service
 from ..services.jwt_service import JWTError, JWTService
@@ -44,6 +45,7 @@ async def refresh(
     user = await user_service.get_by_id(session, payload["sub"])
     if user is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "user not found")
+    set_user_id(str(user.id))
 
     access, ttl = jwt_service.issue_access_token(
         user_id=str(user.id), email=user.email, name=user.name
@@ -76,5 +78,6 @@ async def validate(
             status_code=status.HTTP_401_UNAUTHORIZED,
             content={"valid": False, "reason": "user not found"},
         )
+    set_user_id(str(user.id))
 
     return {"valid": True, "user": user.to_dict(), "claims": claims}

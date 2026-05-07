@@ -52,6 +52,29 @@ async def test_validate_returns_user_for_valid_token(client, db_session):
 
 
 @pytest.mark.asyncio
+async def test_validate_echoes_session_trace_id(client, db_session):
+    profile = OAuthProfile(
+        provider="github", provider_id="789", email="trace@x.co", name="Trace", avatar_url=None
+    )
+    user = await user_service.upsert_from_oauth(db_session, profile)
+    token, _ = JWTService().issue_access_token(
+        user_id=str(user.id), email=user.email, name=user.name
+    )
+
+    resp = await client.post(
+        "/auth/validate",
+        json={"token": token},
+        headers={
+            "X-Internal-API-Key": "test-internal-key",
+            "x-session-trace-id": "session-defense-456",
+        },
+    )
+
+    assert resp.status_code == 200
+    assert resp.headers["x-session-trace-id"] == "session-defense-456"
+
+
+@pytest.mark.asyncio
 async def test_validate_rejects_tampered_token(client):
     resp = await client.post(
         "/auth/validate",

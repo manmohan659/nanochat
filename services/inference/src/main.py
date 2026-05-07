@@ -12,7 +12,14 @@ from prometheus_fastapi_instrumentator import Instrumentator
 from pydantic import BaseModel
 
 from config import Settings, get_settings
-from logging_setup import configure_logging, get_logger, new_trace_id, set_trace_id, set_user_id
+from logging_setup import (
+    configure_logging,
+    get_logger,
+    new_trace_id,
+    set_session_trace_id,
+    set_trace_id,
+    set_user_id,
+)
 from middleware.internal_auth import require_internal_api_key
 from services.weight_manager import WeightManager
 
@@ -255,7 +262,9 @@ def create_app(settings: Settings | None = None, runtime: InferenceRuntime | Non
     async def request_context(request: Request, call_next) -> Response:
         incoming = request.headers.get("x-trace-id") or request.headers.get("x-request-id")
         trace_id = incoming or new_trace_id()
+        session_trace_id = request.headers.get("x-session-trace-id")
         set_trace_id(trace_id)
+        set_session_trace_id(session_trace_id)
         set_user_id(None)
 
         logger.info("request_start", method=request.method, path=request.url.path)
@@ -265,6 +274,8 @@ def create_app(settings: Settings | None = None, runtime: InferenceRuntime | Non
             logger.exception("request_failed", method=request.method, path=request.url.path)
             raise
         response.headers["x-trace-id"] = trace_id
+        if session_trace_id:
+            response.headers["x-session-trace-id"] = session_trace_id
         logger.info(
             "request_end",
             method=request.method,

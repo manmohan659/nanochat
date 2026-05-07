@@ -15,7 +15,7 @@ from cachetools import TTLCache
 from fastapi import Depends, Header, HTTPException, Request, status
 
 from ..config import Settings, get_settings
-from ..logging_setup import get_logger, get_trace_id, set_user_id
+from ..logging_setup import get_logger, get_session_trace_id, get_trace_id, set_user_id
 
 logger = get_logger(__name__)
 
@@ -90,6 +90,9 @@ async def _validate_with_auth_service(
         trace_id = get_trace_id()
         if trace_id:
             headers["x-trace-id"] = trace_id
+        session_trace_id = get_session_trace_id()
+        if session_trace_id:
+            headers["x-session-trace-id"] = session_trace_id
 
         response = await client.post(
             f"{settings.auth_service_url.rstrip('/')}/auth/validate",

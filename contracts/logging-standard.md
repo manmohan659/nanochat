@@ -3,8 +3,8 @@
 All services in the samosaChaat platform emit logs as **single-line JSON**
 on stdout. Promtail ships them to Loki, where Grafana queries them by label
 and by JSON field. Because every service shares the same schema, a single
-trace_id lets you follow a request from the frontend through auth → chat-api
-→ inference.
+trace_id plus session_trace_id let you follow a request from the frontend
+through auth → chat-api → inference.
 
 ## Required fields
 
@@ -22,6 +22,7 @@ Conditionally included (when present in the request context):
 | Field        | When to include                          |
 |--------------|------------------------------------------|
 | `trace_id`   | every request served by a backend service — propagated via the `x-trace-id` header |
+| `session_trace_id` | browser-session correlation — propagated via the `x-session-trace-id` header |
 | `user_id`    | every request authenticated as a user    |
 | `inference_time_ms` | emitted by chat-api and inference around model calls |
 | `error`      | on exceptions — the stringified cause    |
@@ -40,10 +41,10 @@ Key pieces:
 ```python
 structlog.configure(
     processors=[
-        structlog.contextvars.merge_contextvars,   # trace_id / user_id from context
+        structlog.contextvars.merge_contextvars,   # trace_id / session_trace_id / user_id
         structlog.processors.add_log_level,        # -> level field
         structlog.processors.TimeStamper(fmt="iso", utc=True),
-        _inject_context,                           # service + trace_id + user_id defaults
+        _inject_context,                           # service + request context defaults
         structlog.processors.JSONRenderer(),       # final JSON line
     ],
     ...
@@ -53,8 +54,9 @@ structlog.configure(
 Each service calls `configure_logging()` once at startup (inside
 `create_app()`), and then uses `logger = get_logger(__name__)` everywhere.
 `trace_id` is set by a FastAPI middleware that reads the incoming
-`x-trace-id` header (or mints a new one via `new_trace_id()`) and propagates
-it to downstream calls.
+`x-trace-id` header (or mints a new one via `new_trace_id()`). The same
+middleware binds `session_trace_id` from `x-session-trace-id` when present.
+Both values are propagated to downstream calls.
 
 Container entrypoints run Uvicorn with `--no-access-log`; request logs must come
 from the JSON middleware events rather than plaintext Uvicorn access lines.
@@ -77,10 +79,11 @@ export const logger = pino({
 });
 ```
 
-When emitting, always include `trace_id` and `user_id` when known:
+When emitting, always include `trace_id`, `session_trace_id`, and `user_id`
+when known:
 
 ```ts
-logger.info({ trace_id, user_id, path: req.url }, "request_start");
+logger.info({ trace_id, session_trace_id, user_id, path: req.url }, "request_start");
 ```
 
 In API routes, read the incoming `x-trace-id` header and echo it back on the
@@ -95,6 +98,8 @@ Labels Promtail applies: `namespace`, `app`, `pod`, `level`, `service`,
 |-------------------------------|-----------------------------------------------------------------------|
 | All errors in prod            | `{namespace="samosachaat-prod"} | json | level="error"`               |
 | Trace a request across tiers  | `{namespace="samosachaat-prod"} | json | trace_id="<trace>"`          |
+| Trace a browser session       | `{namespace="samosachaat-prod"} | json | session_trace_id="<session>"` |
+| Trace a user                  | `{namespace="samosachaat-prod"} | json | user_id="<user-id>"`          |
 | Auth failures                 | `{namespace="samosachaat-prod"} | json | service="auth" | level="error"`         |
 | Slow inference calls          | `{namespace="samosachaat-prod"} | json | service="inference" | inference_time_ms > 5000` |
 | 5xx by service                | `{namespace="samosachaat-prod"} | json | status_code >= 500`          |
@@ -102,12 +107,17 @@ Labels Promtail applies: `namespace`, `app`, `pod`, `level`, `service`,
 
 ## Trace propagation contract
 
-1. **Frontend** — mint `trace_id` on navigation (or reuse an existing one from
-   the current session), send it as `x-trace-id` on every `fetch` to the API.
-2. **chat-api** — read `x-trace-id`, store in a context var, re-emit on the
-   response, and forward it on every httpx call to auth or inference.
-3. **auth / inference** — read `x-trace-id` and bind it to the logger context
-   for the duration of the request.
+1. **Frontend** — mint `x-session-trace-id` once per browser session and send it
+   on every `fetch` to the API. Frontend API routes also mint or forward
+   `x-trace-id` for per-request correlation.
+2. **chat-api** — read `x-trace-id` and `x-session-trace-id`, store them in
+   context vars, re-emit them on the response, and forward them on every httpx
+   call to auth or inference. It forwards `x-user-id` to inference only from the
+   validated JWT user context.
+3. **auth / inference** — read `x-trace-id` and `x-session-trace-id` and bind
+   them to the logger context for the duration of the request. Authenticated
+   auth routes and inference calls bind `user_id` only after auth/internal
+   validation succeeds.
 
 Services MUST NOT log raw secrets, JWTs, OAuth client secrets, API keys, or
 full user message text. Log IDs, lengths, and booleans — not contents.

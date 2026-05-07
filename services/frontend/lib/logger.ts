@@ -19,6 +19,10 @@ export function getTraceId(req: NextRequest): string {
   return req.headers.get('x-trace-id') || req.headers.get('x-request-id') || crypto.randomUUID().replace(/-/g, '');
 }
 
+export function getSessionTraceId(req: NextRequest): string | null {
+  return req.headers.get('x-session-trace-id');
+}
+
 export function authHeader(req: NextRequest): string | null {
   return req.headers.get('authorization');
 }
@@ -31,21 +35,35 @@ export function upstreamHeaders(
   const headers: Record<string, string> = {
     'x-trace-id': traceId,
   };
+  const sessionTraceId = getSessionTraceId(req);
+  if (sessionTraceId) headers['x-session-trace-id'] = sessionTraceId;
   const auth = authHeader(req);
   if (auth) headers.Authorization = auth;
   if (options.contentType !== false) headers['Content-Type'] = 'application/json';
   return headers;
 }
 
-export function jsonWithTrace(body: unknown, init: ResponseInit, traceId: string) {
+export function jsonWithTrace(
+  body: unknown,
+  init: ResponseInit,
+  traceId: string,
+  sessionTraceId?: string | null,
+) {
   const response = NextResponse.json(body, init);
   response.headers.set('x-trace-id', traceId);
+  if (sessionTraceId) response.headers.set('x-session-trace-id', sessionTraceId);
   return response;
 }
 
-export function textWithTrace(body: BodyInit | null, init: ResponseInit, traceId: string) {
+export function textWithTrace(
+  body: BodyInit | null,
+  init: ResponseInit,
+  traceId: string,
+  sessionTraceId?: string | null,
+) {
   const response = new Response(body, init);
   response.headers.set('x-trace-id', traceId);
+  if (sessionTraceId) response.headers.set('x-session-trace-id', sessionTraceId);
   return response;
 }
 

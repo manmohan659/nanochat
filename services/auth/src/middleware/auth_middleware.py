@@ -8,6 +8,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..database import get_session
+from ..logging_setup import set_user_id
 from ..models.user import User
 from ..services import user_service
 from ..services.jwt_service import JWTError, JWTService
@@ -40,5 +41,6 @@ async def require_user(
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "user not found")
 
     ctx = AuthContext(user=user, payload=payload)
+    set_user_id(str(user.id))
     request.state.auth = ctx
     return ctx

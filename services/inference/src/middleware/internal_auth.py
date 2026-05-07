@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from fastapi import HTTPException, Request, status
 
+from logging_setup import set_user_id
+
 
 def require_internal_api_key(
     request: Request,
@@ -20,3 +22,6 @@ def require_internal_api_key(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid internal API key",
         )
+    user_id = request.headers.get("x-user-id")
+    if user_id:
+        set_user_id(user_id)
