@@ -43,4 +43,5 @@ async def require_user(
     ctx = AuthContext(user=user, payload=payload)
     set_user_id(str(user.id))
     request.state.auth = ctx
+    request.state.user_id = str(user.id)
     return ctx

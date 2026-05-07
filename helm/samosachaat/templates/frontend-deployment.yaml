@@ -1,5 +1,8 @@
 {{- if .Values.frontend.enabled -}}
 {{- $svcName := include "samosachaat.svcName" (dict "root" . "svc" "frontend") -}}
+{{- $authSvcName := include "samosachaat.svcName" (dict "root" . "svc" "auth") -}}
+{{- $chatApiSvcName := include "samosachaat.svcName" (dict "root" . "svc" "chat-api") -}}
+{{- $inferenceSvcName := include "samosachaat.svcName" (dict "root" . "svc" "inference") -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -42,8 +45,14 @@ spec:
             - secretRef:
                 name: samosachaat-secrets
                 optional: true
-          {{- with .Values.frontend.env }}
           env:
+            - name: AUTH_SERVICE_URL
+              value: {{ printf "http://%s:%v" $authSvcName (int .Values.auth.port) | quote }}
+            - name: CHAT_API_URL
+              value: {{ printf "http://%s:%v" $chatApiSvcName (int .Values.chatApi.port) | quote }}
+            - name: INFERENCE_SERVICE_URL
+              value: {{ printf "http://%s:%v" $inferenceSvcName (int .Values.inference.port) | quote }}
+          {{- with .Values.frontend.env }}
             {{- range $k, $v := . }}
             - name: {{ $k }}
               value: {{ $v | quote }}

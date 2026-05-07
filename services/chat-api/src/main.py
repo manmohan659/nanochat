@@ -76,6 +76,12 @@ def create_app() -> FastAPI:
         response.headers["x-trace-id"] = trace_id
         if session_trace_id:
             response.headers["x-session-trace-id"] = session_trace_id
+        user_id = getattr(request.state, "user_id", None)
+        user = getattr(request.state, "user", None)
+        if user_id is None and user is not None:
+            user_id = getattr(user, "id", None)
+        if user_id is not None:
+            set_user_id(str(user_id))
         logger.info(
             "request_end",
             method=request.method,
