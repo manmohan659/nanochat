@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     default_step: int | None = None
     hf_token: str | None = None
     hf_repo_owner: str = "manmohan659"
+    upstream_generate_url: str | None = None
     internal_api_key: str | None = None
     num_workers: int = 1
     device_type: str = ""
