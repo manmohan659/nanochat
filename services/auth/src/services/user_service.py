@@ -18,6 +18,9 @@ async def upsert_from_oauth(session: AsyncSession, profile: OAuthProfile) -> Use
         User.provider_id == profile.provider_id,
     )
     existing = (await session.execute(stmt)).scalar_one_or_none()
+    if existing is None:
+        email_stmt = select(User).where(User.email == profile.email)
+        existing = (await session.execute(email_stmt)).scalar_one_or_none()
 
     now = datetime.now(timezone.utc)
     if existing is None:
@@ -44,6 +47,8 @@ async def upsert_from_oauth(session: AsyncSession, profile: OAuthProfile) -> Use
         existing.name = profile.name
     if profile.avatar_url is not None:
         existing.avatar_url = profile.avatar_url
+    existing.provider = profile.provider
+    existing.provider_id = profile.provider_id
     await session.commit()
     await session.refresh(existing)
     return existing
