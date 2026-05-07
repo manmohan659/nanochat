@@ -29,14 +29,24 @@ output "cluster_oidc_provider_arn" {
 }
 
 output "rds_endpoint" {
-  description = "RDS endpoint (host:port)."
-  value       = module.rds.db_instance_endpoint
+  description = "Shared non-prod RDS endpoint (host:port), owned by the dev/non-prod Terraform state."
+  value       = data.terraform_remote_state.nonprod.outputs.rds_endpoint
 }
 
 output "rds_password" {
-  description = "Generated RDS master password."
-  value       = module.rds.db_password
+  description = "Shared non-prod RDS master password, owned by the dev/non-prod Terraform state."
+  value       = data.terraform_remote_state.nonprod.outputs.rds_password
   sensitive   = true
+}
+
+output "rds_identifier" {
+  description = "Shared non-prod RDS instance identifier."
+  value       = "samosachaat-nonprod-pg"
+}
+
+output "uat_database_name" {
+  description = "Logical UAT database hosted on the shared non-prod RDS instance."
+  value       = "samosachaat_uat"
 }
 
 output "ecr_repository_urls" {

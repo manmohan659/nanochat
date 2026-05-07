@@ -13,13 +13,16 @@ set -euo pipefail
 ###############################################################################
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-AWS_ACCOUNT="883107058766"
-AWS_REGION="us-west-2"
-ECR_REGISTRY="${AWS_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-EC2_HOST="52.10.243.118"
+AWS_PROFILE="${AWS_PROFILE:-accmanmohanusfca}"
+AWS_ACCOUNT="${AWS_ACCOUNT_ID:-906352610196}"
+AWS_REGION="${AWS_REGION:-us-west-2}"
+ECR_REGISTRY="${ECR_REGISTRY:-${AWS_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com}"
+EC2_HOST="${EC2_HOST:-16.148.217.62}"
 EC2_USER="ubuntu"
-EC2_KEY="$HOME/.ssh/samosachaat.pem"  # adjust if your key is elsewhere
+EC2_KEY="${EC2_KEY:-$HOME/Documents/FinalSemester/DevOps/hellokitty.pem}"
 DOMAIN="samosachaat.art"
+
+export AWS_PROFILE AWS_REGION
 
 # Colors
 RED='\033[0;31m'
@@ -135,17 +138,27 @@ ec2_down() {
 
 eks_deploy() {
     local ENV="${1:-dev}"
+    if [[ ! "${ENV}" =~ ^(dev|qa|uat|prod)$ ]]; then
+        err "Unsupported EKS environment: ${ENV}. Use dev, qa, uat, or prod."
+        exit 2
+    fi
     local APP_NAMESPACE="samosachaat-${ENV}"
-    log "Provisioning EKS cluster (${ENV})... This takes ~15-20 minutes."
+    local INFRA_ENV="${ENV}"
+    local INFRA_TIER="prod"
+    if [[ "${ENV}" =~ ^(dev|qa|uat)$ ]]; then
+        INFRA_ENV="dev"
+        INFRA_TIER="nonprod"
+    fi
+    log "Provisioning ${INFRA_TIER} EKS/RDS infrastructure for runtime env ${ENV}... This takes ~15-20 minutes."
 
-    cd "${SCRIPT_DIR}/terraform/environments/${ENV}"
+    cd "${SCRIPT_DIR}/terraform/environments/${INFRA_ENV}"
 
     # Init & apply Terraform
     log "Running terraform init..."
     terraform init
 
     local TF_APPLY_ARGS=(-auto-approve)
-    if [ "${ENV}" != "dev" ]; then
+    if [ "${INFRA_ENV}" != "dev" ]; then
         local GITHUB_ACTIONS_ROLE_ARN_VALUE="${GITHUB_ACTIONS_ROLE_ARN:-}"
         if [ -z "${GITHUB_ACTIONS_ROLE_ARN_VALUE}" ]; then
             GITHUB_ACTIONS_ROLE_ARN_VALUE="$(aws iam get-role \
@@ -159,27 +172,29 @@ eks_deploy() {
             warn "GitHub Actions role ARN not found; CI/CD will not be able to deploy to ${ENV} until github_actions_role_arn is applied."
         fi
     fi
-    local EXISTING_ALB_ARN="" EXISTING_ALB_DNS="" EXISTING_ALB_ZONE_ID=""
-    EXISTING_ALB_ARN="$(aws resourcegroupstaggingapi get-resources \
-        --region "${AWS_REGION}" \
-        --resource-type-filters elasticloadbalancing:loadbalancer \
-        --tag-filters "Key=ingress.k8s.aws/stack,Values=${APP_NAMESPACE}/samosachaat" \
-        --query 'ResourceTagMappingList[0].ResourceARN' \
-        --output text 2>/dev/null || true)"
-    if [ -n "${EXISTING_ALB_ARN}" ] && [ "${EXISTING_ALB_ARN}" != "None" ]; then
-        EXISTING_ALB_DNS="$(aws elbv2 describe-load-balancers \
+    if [ "${ENV}" = "prod" ]; then
+        local EXISTING_ALB_ARN="" EXISTING_ALB_DNS="" EXISTING_ALB_ZONE_ID=""
+        EXISTING_ALB_ARN="$(aws resourcegroupstaggingapi get-resources \
             --region "${AWS_REGION}" \
-            --load-balancer-arns "${EXISTING_ALB_ARN}" \
-            --query 'LoadBalancers[0].DNSName' \
+            --resource-type-filters elasticloadbalancing:loadbalancer \
+            --tag-filters "Key=ingress.k8s.aws/stack,Values=${APP_NAMESPACE}/samosachaat" \
+            --query 'ResourceTagMappingList[0].ResourceARN' \
             --output text 2>/dev/null || true)"
-        EXISTING_ALB_ZONE_ID="$(aws elbv2 describe-load-balancers \
-            --region "${AWS_REGION}" \
-            --load-balancer-arns "${EXISTING_ALB_ARN}" \
-            --query 'LoadBalancers[0].CanonicalHostedZoneId' \
-            --output text 2>/dev/null || true)"
-        if [ -n "${EXISTING_ALB_DNS}" ] && [ "${EXISTING_ALB_DNS}" != "None" ] && \
-           [ -n "${EXISTING_ALB_ZONE_ID}" ] && [ "${EXISTING_ALB_ZONE_ID}" != "None" ]; then
-            TF_APPLY_ARGS+=("-var=alb_dns_name=${EXISTING_ALB_DNS}" "-var=alb_zone_id=${EXISTING_ALB_ZONE_ID}")
+        if [ -n "${EXISTING_ALB_ARN}" ] && [ "${EXISTING_ALB_ARN}" != "None" ]; then
+            EXISTING_ALB_DNS="$(aws elbv2 describe-load-balancers \
+                --region "${AWS_REGION}" \
+                --load-balancer-arns "${EXISTING_ALB_ARN}" \
+                --query 'LoadBalancers[0].DNSName' \
+                --output text 2>/dev/null || true)"
+            EXISTING_ALB_ZONE_ID="$(aws elbv2 describe-load-balancers \
+                --region "${AWS_REGION}" \
+                --load-balancer-arns "${EXISTING_ALB_ARN}" \
+                --query 'LoadBalancers[0].CanonicalHostedZoneId' \
+                --output text 2>/dev/null || true)"
+            if [ -n "${EXISTING_ALB_DNS}" ] && [ "${EXISTING_ALB_DNS}" != "None" ] && \
+               [ -n "${EXISTING_ALB_ZONE_ID}" ] && [ "${EXISTING_ALB_ZONE_ID}" != "None" ]; then
+                TF_APPLY_ARGS+=("-var=alb_dns_name=${EXISTING_ALB_DNS}" "-var=alb_zone_id=${EXISTING_ALB_ZONE_ID}")
+            fi
         fi
     fi
 
@@ -187,15 +202,15 @@ eks_deploy() {
     terraform apply "${TF_APPLY_ARGS[@]}"
 
     # Get cluster info
-    local CLUSTER_NAME=$(terraform output -raw cluster_name 2>/dev/null || echo "samosachaat-${ENV}-eks")
-    local DB_ENDPOINT DB_HOST DB_PORT DB_PASSWORD DB_USER DB_NAME DATABASE_URL
+    local CLUSTER_NAME=$(terraform output -raw cluster_name 2>/dev/null || echo "samosachaat-${INFRA_ENV}-eks")
+    local DB_ENDPOINT DB_HOST DB_PORT DB_MASTER_PASSWORD DB_MASTER_USER DB_APP_USER_VALUE DB_NAME DB_APP_PASSWORD_VALUE DATABASE_URL
     DB_ENDPOINT="$(terraform output -raw rds_endpoint)"
     DB_HOST="${DB_ENDPOINT%:*}"
     DB_PORT="${DB_ENDPOINT##*:}"
-    DB_PASSWORD="$(terraform output -raw rds_password)"
-    DB_USER="samosachaat_admin"
-    DB_NAME="samosachaat"
-    DATABASE_URL="postgresql+asyncpg://$(urlencode "$DB_USER"):$(urlencode "$DB_PASSWORD")@${DB_HOST}:${DB_PORT}/${DB_NAME}"
+    DB_MASTER_PASSWORD="$(terraform output -raw rds_password)"
+    DB_MASTER_USER="samosachaat_admin"
+    DB_NAME="samosachaat_${ENV}"
+    DB_APP_USER_VALUE="${DB_APP_USER:-samosachaat_${ENV}_app}"
 
     local JWT_DIR JWT_PRIVATE_KEY_FILE_RESOLVED JWT_PUBLIC_KEY_FILE_RESOLVED
     JWT_DIR="$(mktemp -d)"
@@ -221,11 +236,41 @@ eks_deploy() {
     INTERNAL_API_KEY_VALUE="${INTERNAL_API_KEY:-$(openssl rand -hex 32)}"
     SESSION_SECRET_VALUE="${SESSION_SECRET:-$(openssl rand -hex 32)}"
 
+    log "Configuring kubectl for ${CLUSTER_NAME}..."
+    aws eks update-kubeconfig --name "${CLUSTER_NAME}" --region ${AWS_REGION}
+    kubectl create namespace "${APP_NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
+
+    if [ -n "${DB_APP_PASSWORD:-}" ]; then
+        DB_APP_PASSWORD_VALUE="${DB_APP_PASSWORD}"
+    else
+        local EXISTING_DATABASE_URL=""
+        EXISTING_DATABASE_URL="$(kubectl get secret samosachaat-secrets \
+            -n "${APP_NAMESPACE}" \
+            -o jsonpath='{.data.DATABASE_URL}' 2>/dev/null | base64 -d 2>/dev/null || true)"
+        if [ -n "${EXISTING_DATABASE_URL}" ]; then
+            DB_APP_PASSWORD_VALUE="$(python3 -c 'import sys, urllib.parse; print(urllib.parse.unquote(urllib.parse.urlsplit(sys.argv[1]).password or ""))' "${EXISTING_DATABASE_URL}")"
+        fi
+        if [ -z "${DB_APP_PASSWORD_VALUE:-}" ]; then
+            DB_APP_PASSWORD_VALUE="$(openssl rand -base64 32 | tr -d '\n')"
+        fi
+    fi
+
+    log "Ensuring logical database ${DB_NAME} exists on ${INFRA_TIER} RDS..."
+    DB_MASTER_PASSWORD="${DB_MASTER_PASSWORD}" DB_APP_PASSWORD="${DB_APP_PASSWORD_VALUE}" \
+        "${SCRIPT_DIR}/scripts/bootstrap-rds-logical-db.sh" \
+        "${APP_NAMESPACE}" "${DB_HOST}" "${DB_PORT}" "${DB_MASTER_USER}" "${DB_NAME}" "${DB_APP_USER_VALUE}"
+
+    DATABASE_URL="postgresql+asyncpg://$(urlencode "$DB_APP_USER_VALUE"):$(urlencode "$DB_APP_PASSWORD_VALUE")@${DB_HOST}:${DB_PORT}/${DB_NAME}"
+
     local K8S_APP_SECRET_ARGS=(
         --from-literal="DATABASE_URL=${DATABASE_URL}"
+        --from-literal="DATABASE_NAME=${DB_NAME}"
+        --from-literal="DATABASE_USER=${DB_APP_USER_VALUE}"
+        --from-literal="RDS_ISOLATION_TIER=${INFRA_TIER}"
         --from-literal="AUTH_SERVICE_URL=http://auth:8001"
         --from-literal="CHAT_API_URL=http://chat-api:8002"
-        --from-literal="AUTH_BASE_URL=https://${DOMAIN}/api"
+        --from-literal="INFERENCE_SERVICE_URL=${INFERENCE_SERVICE_URL:-http://inference:8003}"
+        --from-literal="AUTH_BASE_URL=https://${DOMAIN}"
         --from-literal="FRONTEND_URL=https://${DOMAIN}"
         --from-literal="COOKIE_SECURE=true"
         --from-literal="COOKIE_DOMAIN=${DOMAIN}"
@@ -234,16 +279,13 @@ eks_deploy() {
         --from-file="JWT_PRIVATE_KEY=${JWT_PRIVATE_KEY_FILE_RESOLVED}"
         --from-file="JWT_PUBLIC_KEY=${JWT_PUBLIC_KEY_FILE_RESOLVED}"
     )
-    for secret_name in GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET INFERENCE_SERVICE_URL HF_TOKEN; do
+    for secret_name in GOOGLE_CLIENT_ID GOOGLE_CLIENT_SECRET GITHUB_CLIENT_ID GITHUB_CLIENT_SECRET HF_TOKEN; do
         secret_value="${!secret_name:-}"
         if [ -n "${secret_value}" ]; then
             K8S_APP_SECRET_ARGS+=(--from-literal="${secret_name}=${secret_value}")
         fi
     done
 
-    log "Configuring kubectl for ${CLUSTER_NAME}..."
-    aws eks update-kubeconfig --name "${CLUSTER_NAME}" --region ${AWS_REGION}
-    kubectl create namespace "${APP_NAMESPACE}" --dry-run=client -o yaml | kubectl apply -f -
     kubectl create secret generic samosachaat-secrets \
         -n "${APP_NAMESPACE}" \
         "${K8S_APP_SECRET_ARGS[@]}" \
@@ -255,15 +297,13 @@ eks_deploy() {
             --from-literal=url="${SLACK_WEBHOOK_URL}" \
             --dry-run=client -o yaml | kubectl apply -f -
     else
-        warn "SLACK_WEBHOOK_URL is not set; Alertmanager Slack notifications need this secret before the observability stack is installed."
-        kubectl create secret generic alertmanager-slack-webhook \
-            -n "${APP_NAMESPACE}" \
-            --from-literal=url="https://hooks.slack.com/services/REPLACE/ME/NOW" \
-            --dry-run=client -o yaml | kubectl apply -f -
+        warn "SLACK_WEBHOOK_URL is not set; skipping observability install because Alertmanager needs a real Slack webhook for the final demo."
     fi
 
+    local GRAFANA_OAUTH_READY="false"
     if [ -n "${GITHUB_GRAFANA_CLIENT_ID:-}" ] && [ -n "${GITHUB_GRAFANA_CLIENT_SECRET:-}" ] && \
        [ -n "${GOOGLE_GRAFANA_CLIENT_ID:-}" ] && [ -n "${GOOGLE_GRAFANA_CLIENT_SECRET:-}" ]; then
+        GRAFANA_OAUTH_READY="true"
         kubectl create secret generic grafana-oauth-secrets \
             -n "${APP_NAMESPACE}" \
             --from-literal=GITHUB_GRAFANA_CLIENT_ID="${GITHUB_GRAFANA_CLIENT_ID}" \
@@ -273,35 +313,35 @@ eks_deploy() {
             --from-literal=SLACK_WEBHOOK_URL="${SLACK_WEBHOOK_URL:-}" \
             --dry-run=client -o yaml | kubectl apply -f -
     else
-        warn "Grafana OAuth env vars are incomplete; set GitHub/Google Grafana OAuth vars before installing observability for the final demo."
-        kubectl create secret generic grafana-oauth-secrets \
-            -n "${APP_NAMESPACE}" \
-            --from-literal=GITHUB_GRAFANA_CLIENT_ID="${GITHUB_GRAFANA_CLIENT_ID:-}" \
-            --from-literal=GITHUB_GRAFANA_CLIENT_SECRET="${GITHUB_GRAFANA_CLIENT_SECRET:-}" \
-            --from-literal=GOOGLE_GRAFANA_CLIENT_ID="${GOOGLE_GRAFANA_CLIENT_ID:-}" \
-            --from-literal=GOOGLE_GRAFANA_CLIENT_SECRET="${GOOGLE_GRAFANA_CLIENT_SECRET:-}" \
-            --from-literal=SLACK_WEBHOOK_URL="${SLACK_WEBHOOK_URL:-}" \
-            --dry-run=client -o yaml | kubectl apply -f -
+        warn "Grafana OAuth env vars are incomplete; skipping observability install until real OAuth secrets are present."
     fi
 
     # Install ALB Ingress Controller
-    log "Installing ALB Ingress Controller..."
-    helm repo add eks https://aws.github.io/eks-charts 2>/dev/null || true
-    helm repo update
-    helm upgrade --install aws-load-balancer-controller eks/aws-load-balancer-controller \
-        -n kube-system \
-        --set clusterName="${CLUSTER_NAME}" \
-        --set serviceAccount.create=true \
-        --set serviceAccount.name=aws-load-balancer-controller \
-        --set "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn=$(terraform output -raw alb_controller_role_arn)" \
-        --wait --timeout 5m 2>/dev/null || warn "ALB controller may need IRSA setup"
+    if kubectl -n kube-system rollout status deployment/aws-load-balancer-controller --timeout=30s >/dev/null 2>&1; then
+        log "ALB Ingress Controller is already healthy; skipping controller upgrade."
+    else
+        log "Installing ALB Ingress Controller..."
+        helm repo add eks https://aws.github.io/eks-charts 2>/dev/null || true
+        helm repo update
+        helm upgrade --install aws-load-balancer-controller eks/aws-load-balancer-controller \
+            -n kube-system \
+            --set clusterName="${CLUSTER_NAME}" \
+            --set serviceAccount.create=true \
+            --set serviceAccount.name=aws-load-balancer-controller \
+            --set "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn=$(terraform output -raw alb_controller_role_arn)" \
+            --wait --timeout 5m 2>/dev/null || warn "ALB controller may need IRSA setup"
+    fi
 
     # Deploy observability stack
-    log "Deploying observability stack..."
-    helm dependency build "${SCRIPT_DIR}/helm/observability" 2>/dev/null || true
-    helm upgrade --install observability "${SCRIPT_DIR}/helm/observability" \
-        --namespace "${APP_NAMESPACE}" --create-namespace \
-        --wait --timeout 10m 2>/dev/null || warn "Observability deploy needs review"
+    if [ -n "${SLACK_WEBHOOK_URL:-}" ] && [ "${GRAFANA_OAUTH_READY}" = "true" ]; then
+        log "Deploying observability stack..."
+        helm dependency build "${SCRIPT_DIR}/helm/observability" 2>/dev/null || true
+        helm upgrade --install observability "${SCRIPT_DIR}/helm/observability" \
+            --namespace "${APP_NAMESPACE}" --create-namespace \
+            --wait --timeout 10m
+    else
+        warn "Observability stack was not installed. Set SLACK_WEBHOOK_URL plus Grafana GitHub/Google OAuth vars, then rerun ./deploy.sh eks ${ENV}."
+    fi
 
     # Deploy samosaChaat
     local VALUES_FILE="${SCRIPT_DIR}/helm/samosachaat/values-${ENV}.yaml"
@@ -348,46 +388,50 @@ eks_deploy() {
             --wait --timeout 10m
     fi
 
-    log "Resolving ALB address and reconciling Route53 aliases with Terraform..."
-    local ALB_HOST="" ALB_LOOKUP="" ALB_ZONE_ID=""
-    for _ in {1..40}; do
-        ALB_HOST="$(kubectl get ingress samosachaat -n "${APP_NAMESPACE}" -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)"
-        if [ -n "${ALB_HOST}" ]; then
-            break
-        fi
-        sleep 15
-    done
-    if [ -z "${ALB_HOST}" ]; then
-        local ALB_ARN=""
-        ALB_ARN="$(aws resourcegroupstaggingapi get-resources \
-            --region "${AWS_REGION}" \
-            --resource-type-filters elasticloadbalancing:loadbalancer \
-            --tag-filters "Key=ingress.k8s.aws/stack,Values=${APP_NAMESPACE}/samosachaat" \
-            --query 'ResourceTagMappingList[0].ResourceARN' \
-            --output text 2>/dev/null || true)"
-        if [ -n "${ALB_ARN}" ] && [ "${ALB_ARN}" != "None" ]; then
-            ALB_HOST="$(aws elbv2 describe-load-balancers \
+    if [ "${ENV}" = "prod" ]; then
+        log "Resolving prod ALB address and reconciling Route53 aliases with Terraform..."
+        local ALB_HOST="" ALB_LOOKUP="" ALB_ZONE_ID=""
+        for _ in {1..40}; do
+            ALB_HOST="$(kubectl get ingress samosachaat -n "${APP_NAMESPACE}" -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)"
+            if [ -n "${ALB_HOST}" ]; then
+                break
+            fi
+            sleep 15
+        done
+        if [ -z "${ALB_HOST}" ]; then
+            local ALB_ARN=""
+            ALB_ARN="$(aws resourcegroupstaggingapi get-resources \
                 --region "${AWS_REGION}" \
-                --load-balancer-arns "${ALB_ARN}" \
-                --query 'LoadBalancers[0].DNSName' \
+                --resource-type-filters elasticloadbalancing:loadbalancer \
+                --tag-filters "Key=ingress.k8s.aws/stack,Values=${APP_NAMESPACE}/samosachaat" \
+                --query 'ResourceTagMappingList[0].ResourceARN' \
                 --output text 2>/dev/null || true)"
+            if [ -n "${ALB_ARN}" ] && [ "${ALB_ARN}" != "None" ]; then
+                ALB_HOST="$(aws elbv2 describe-load-balancers \
+                    --region "${AWS_REGION}" \
+                    --load-balancer-arns "${ALB_ARN}" \
+                    --query 'LoadBalancers[0].DNSName' \
+                    --output text 2>/dev/null || true)"
+            fi
         fi
-    fi
-    if [ -n "${ALB_HOST}" ]; then
-        ALB_LOOKUP="${ALB_HOST#dualstack.}"
-        ALB_ZONE_ID="$(aws elbv2 describe-load-balancers \
-            --region "${AWS_REGION}" \
-            --query "LoadBalancers[?DNSName=='${ALB_LOOKUP}'].CanonicalHostedZoneId | [0]" \
-            --output text 2>/dev/null || true)"
-        if [ -n "${ALB_ZONE_ID}" ] && [ "${ALB_ZONE_ID}" != "None" ]; then
-            terraform apply "${TF_APPLY_ARGS[@]}" \
-                -var="alb_dns_name=${ALB_LOOKUP}" \
-                -var="alb_zone_id=${ALB_ZONE_ID}"
+        if [ -n "${ALB_HOST}" ]; then
+            ALB_LOOKUP="${ALB_HOST#dualstack.}"
+            ALB_ZONE_ID="$(aws elbv2 describe-load-balancers \
+                --region "${AWS_REGION}" \
+                --query "LoadBalancers[?DNSName=='${ALB_LOOKUP}'].CanonicalHostedZoneId | [0]" \
+                --output text 2>/dev/null || true)"
+            if [ -n "${ALB_ZONE_ID}" ] && [ "${ALB_ZONE_ID}" != "None" ]; then
+                terraform apply "${TF_APPLY_ARGS[@]}" \
+                    -var="alb_dns_name=${ALB_LOOKUP}" \
+                    -var="alb_zone_id=${ALB_ZONE_ID}"
+            else
+                warn "Could not resolve ALB hosted-zone ID for ${ALB_LOOKUP}; Route53 alias was not updated."
+            fi
         else
-            warn "Could not resolve ALB hosted-zone ID for ${ALB_LOOKUP}; Route53 alias was not updated."
+            warn "Ingress did not publish an ALB hostname yet; Route53 alias was not updated."
         fi
     else
-        warn "Ingress did not publish an ALB hostname yet; Route53 alias was not updated."
+        warn "Skipping Route53 alias reconciliation for ${ENV}; only prod is allowed to move samosachaat.art away from the EC2 fallback."
     fi
 
     echo ""
@@ -400,6 +444,17 @@ eks_deploy() {
 
 eks_down() {
     local ENV="${1:-dev}"
+    if [[ "${ENV}" =~ ^(qa|uat)$ ]]; then
+        local CLUSTER_NAME
+        CLUSTER_NAME="$(terraform -chdir="${SCRIPT_DIR}/terraform/environments/dev" output -raw cluster_name 2>/dev/null || echo "samosachaat-dev-eks")"
+        local APP_NAMESPACE="samosachaat-${ENV}"
+        warn "Removing only namespace-scoped ${ENV} releases from the shared non-prod cluster. This will not destroy shared EKS/RDS infrastructure."
+        aws eks update-kubeconfig --name "${CLUSTER_NAME}" --region ${AWS_REGION} 2>/dev/null || true
+        helm uninstall samosachaat -n "${APP_NAMESPACE}" 2>/dev/null || true
+        helm uninstall observability -n "${APP_NAMESPACE}" 2>/dev/null || true
+        kubectl delete namespace "${APP_NAMESPACE}" --ignore-not-found=true
+        return
+    fi
     warn "Tearing down EKS cluster (${ENV})... This saves ~\$0.10/hr + node costs."
 
     cd "${SCRIPT_DIR}/terraform/environments/${ENV}"
@@ -444,7 +499,7 @@ show_status() {
     echo "EKS Cluster:"
     if kubectl get nodes 2>/dev/null; then
         echo ""
-        for ns in samosachaat-dev samosachaat-uat samosachaat-prod; do
+        for ns in samosachaat-dev samosachaat-qa samosachaat-uat samosachaat-prod; do
             kubectl get pods -n "$ns" 2>/dev/null || true
         done
     else
@@ -477,8 +532,8 @@ case "${1:-help}" in
         echo "Modes:"
         echo "  ec2          Deploy monolith to EC2 (cheap, always-on)"
         echo "  ec2-down     Stop EC2 services"
-        echo "  eks [env]    Provision EKS + deploy (demo/grading) [dev|uat|prod]"
-        echo "  eks-down     Tear down EKS (save \$\$\$)"
+        echo "  eks [env]    Provision EKS + deploy (demo/grading) [dev|qa|uat|prod]"
+        echo "  eks-down     Tear down EKS or remove a shared non-prod namespace"
         echo "  status       Show what's running"
         ;;
 esac

@@ -1,54 +1,60 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
+import { authHeader, getTraceId, jsonWithTrace, logRouteError, upstreamHeaders } from '@/lib/logger';
 
 export const runtime = 'nodejs';
 
 const CHAT_API = process.env.CHAT_API_URL || 'http://chat-api:8002';
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
-  const auth = req.headers.get('authorization');
-  if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+type RouteContext = { params: Promise<{ id: string }> };
+
+export async function GET(req: NextRequest, { params }: RouteContext) {
+  const { id } = await params;
+  const traceId = getTraceId(req);
+  if (!authHeader(req)) return jsonWithTrace({ error: 'Unauthorized' }, { status: 401 }, traceId);
 
   try {
-    const res = await fetch(`${CHAT_API}/api/conversations/${params.id}`, {
-      headers: { Authorization: auth },
+    const res = await fetch(`${CHAT_API}/api/conversations/${id}`, {
+      headers: upstreamHeaders(req, traceId, { contentType: false }),
     });
-    return NextResponse.json(await res.json(), { status: res.status });
+    return jsonWithTrace(await res.json(), { status: res.status }, res.headers.get('x-trace-id') || traceId);
   } catch (err) {
-    console.error('[conversations/:id] GET error:', err);
-    return NextResponse.json({ error: 'Failed to fetch conversation' }, { status: 500 });
+    logRouteError('conversation_get_error', err, traceId, { conversation_id: id });
+    return jsonWithTrace({ error: 'Failed to fetch conversation' }, { status: 500 }, traceId);
   }
 }
 
-export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
-  const auth = req.headers.get('authorization');
-  if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+export async function PUT(req: NextRequest, { params }: RouteContext) {
+  const { id } = await params;
+  const traceId = getTraceId(req);
+  if (!authHeader(req)) return jsonWithTrace({ error: 'Unauthorized' }, { status: 401 }, traceId);
 
   const body = await req.json();
   try {
-    const res = await fetch(`${CHAT_API}/api/conversations/${params.id}`, {
+    const res = await fetch(`${CHAT_API}/api/conversations/${id}`, {
       method: 'PUT',
-      headers: { Authorization: auth, 'Content-Type': 'application/json' },
+      headers: upstreamHeaders(req, traceId),
       body: JSON.stringify(body),
     });
-    return NextResponse.json(await res.json(), { status: res.status });
+    return jsonWithTrace(await res.json(), { status: res.status }, res.headers.get('x-trace-id') || traceId);
   } catch (err) {
-    console.error('[conversations/:id] PUT error:', err);
-    return NextResponse.json({ error: 'Failed to update conversation' }, { status: 500 });
+    logRouteError('conversation_update_error', err, traceId, { conversation_id: id });
+    return jsonWithTrace({ error: 'Failed to update conversation' }, { status: 500 }, traceId);
   }
 }
 
-export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
-  const auth = req.headers.get('authorization');
-  if (!auth) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+export async function DELETE(req: NextRequest, { params }: RouteContext) {
+  const { id } = await params;
+  const traceId = getTraceId(req);
+  if (!authHeader(req)) return jsonWithTrace({ error: 'Unauthorized' }, { status: 401 }, traceId);
 
   try {
-    const res = await fetch(`${CHAT_API}/api/conversations/${params.id}`, {
+    const res = await fetch(`${CHAT_API}/api/conversations/${id}`, {
       method: 'DELETE',
-      headers: { Authorization: auth },
+      headers: upstreamHeaders(req, traceId, { contentType: false }),
     });
-    return NextResponse.json({ ok: true }, { status: res.status });
+    return jsonWithTrace({ ok: true }, { status: res.status }, res.headers.get('x-trace-id') || traceId);
   } catch (err) {
-    console.error('[conversations/:id] DELETE error:', err);
-    return NextResponse.json({ error: 'Failed to delete conversation' }, { status: 500 });
+    logRouteError('conversation_delete_error', err, traceId, { conversation_id: id });
+    return jsonWithTrace({ error: 'Failed to delete conversation' }, { status: 500 }, traceId);
   }
 }

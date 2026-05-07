@@ -1,28 +1,29 @@
 import { NextRequest } from 'next/server';
+import { authHeader, getTraceId, logRouteError, textWithTrace, upstreamHeaders } from '@/lib/logger';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const CHAT_API = process.env.CHAT_API_URL || 'http://chat-api:8002';
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  const auth = req.headers.get('authorization');
-  if (!auth) return new Response('Unauthorized', { status: 401 });
+type RouteContext = { params: Promise<{ id: string }> };
+
+export async function POST(req: NextRequest, { params }: RouteContext) {
+  const { id } = await params;
+  const traceId = getTraceId(req);
+  if (!authHeader(req)) return textWithTrace('Unauthorized', { status: 401 }, traceId);
 
   const body = await req.json();
 
   try {
-    const res = await fetch(`${CHAT_API}/api/conversations/${params.id}/messages`, {
+    const res = await fetch(`${CHAT_API}/api/conversations/${id}/messages`, {
       method: 'POST',
-      headers: {
-        Authorization: auth,
-        'Content-Type': 'application/json',
-      },
+      headers: upstreamHeaders(req, traceId),
       body: JSON.stringify(body),
     });
 
     if (!res.ok || !res.body) {
-      return new Response(`Backend error: ${res.status}`, { status: res.status });
+      return textWithTrace(`Backend error: ${res.status}`, { status: res.status }, res.headers.get('x-trace-id') || traceId);
     }
 
     // Stream SSE through
@@ -31,10 +32,11 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache, no-transform',
         Connection: 'keep-alive',
+        'x-trace-id': res.headers.get('x-trace-id') || traceId,
       },
     });
   } catch (err) {
-    console.error('[conversations/:id/messages] POST error:', err);
-    return new Response('Internal Server Error', { status: 500 });
+    logRouteError('conversation_message_post_error', err, traceId, { conversation_id: id });
+    return textWithTrace('Internal Server Error', { status: 500 }, traceId);
   }
 }

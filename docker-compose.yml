@@ -61,11 +61,22 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://samosachaat_admin:localdev@postgres:5432/samosachaat}
       AUTH_SERVICE_URL: ${AUTH_SERVICE_URL:-http://auth:8001}
       # External inference (Modal, etc.). Set in `.env` — see `.env.example`.
-      INFERENCE_SERVICE_URL: ${INFERENCE_SERVICE_URL}
+      INFERENCE_SERVICE_URL: ${INFERENCE_SERVICE_URL:-http://inference:8003}
       INTERNAL_API_KEY: ${INTERNAL_API_KEY:-}
     depends_on:
       - postgres
       - auth
+      - inference
+
+  inference:
+    build:
+      context: ./services/inference
+    restart: unless-stopped
+    ports:
+      - "${INFERENCE_PORT:-8003}:8003"
+    environment:
+      INTERNAL_API_KEY: ${INTERNAL_API_KEY:-}
+      STARTUP_LOAD_ENABLED: ${STARTUP_LOAD_ENABLED:-false}
 
   grafana:
     image: grafana/grafana:latest

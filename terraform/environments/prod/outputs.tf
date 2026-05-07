@@ -29,14 +29,24 @@ output "cluster_oidc_provider_arn" {
 }
 
 output "rds_endpoint" {
-  description = "RDS endpoint (host:port)."
+  description = "Dedicated production RDS endpoint (host:port)."
   value       = module.rds.db_instance_endpoint
 }
 
 output "rds_password" {
-  description = "Generated RDS master password."
+  description = "Generated production RDS master password."
   value       = module.rds.db_password
   sensitive   = true
+}
+
+output "rds_identifier" {
+  description = "Dedicated production RDS instance identifier."
+  value       = "samosachaat-prod-pg"
+}
+
+output "prod_database_name" {
+  description = "Dedicated production database name."
+  value       = "samosachaat_prod"
 }
 
 output "ecr_repository_urls" {

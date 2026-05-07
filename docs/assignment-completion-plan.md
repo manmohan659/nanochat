@@ -9,7 +9,7 @@ This is the grading path for moving the current EC2 demo into the required EKS +
   - `auth` FastAPI OAuth/JWT service.
   - `chat-api` FastAPI conversation/SSE orchestration service.
   - `inference` FastAPI model service or proxy.
-- Database: AWS RDS PostgreSQL only for EKS environments. No in-cluster PostgreSQL and no EC2 PostgreSQL for the final demo.
+- Database: AWS RDS PostgreSQL only for EKS environments. No in-cluster PostgreSQL and no EC2 PostgreSQL for the final demo. Use two physical RDS instances: `samosachaat-nonprod-pg` for dev/QA/UAT logical databases and `samosachaat-prod-pg` for production.
 - Observability: self-hosted `kube-prometheus-stack` + Grafana + Alertmanager + Loki/Promtail on EKS.
 - CI/CD: GitHub Actions with AWS OIDC. No AWS Console deploy clicks.
 
@@ -18,31 +18,38 @@ This is the grading path for moving the current EC2 demo into the required EKS +
 1. Confirm AWS account and region:
 
 ```bash
-aws sts get-caller-identity
+AWS_PROFILE=accmanmohanusfca aws sts get-caller-identity
 export AWS_REGION=us-west-2
 ```
 
 2. Bootstrap Terraform remote state with Terraform:
 
 ```bash
-terraform -chdir=terraform/bootstrap init
-terraform -chdir=terraform/bootstrap apply
+AWS_PROFILE=accmanmohanusfca terraform -chdir=terraform/bootstrap init
+AWS_PROFILE=accmanmohanusfca terraform -chdir=terraform/bootstrap apply
 ```
 
 3. Delegate DNS to Route53.
 
-Run the first Terraform apply for the environment that will own DNS, then copy `route53_name_servers` into GoDaddy name servers for `samosachaat.art`.
+Run the first Terraform apply for the environment that will own DNS, then copy
+`route53_name_servers` into GoDaddy name servers for `samosachaat.art`. The
+current Route53 hosted zone name servers are:
+
+- `ns-1077.awsdns-06.org`
+- `ns-968.awsdns-57.net`
+- `ns-425.awsdns-53.com`
+- `ns-1917.awsdns-47.co.uk`
 
 ```bash
-terraform -chdir=terraform/environments/prod init
-terraform -chdir=terraform/environments/prod apply
-terraform -chdir=terraform/environments/prod output route53_name_servers
+AWS_PROFILE=accmanmohanusfca terraform -chdir=terraform/environments/prod init
+AWS_PROFILE=accmanmohanusfca terraform -chdir=terraform/environments/prod apply
+AWS_PROFILE=accmanmohanusfca terraform -chdir=terraform/environments/prod output route53_name_servers
 ```
 
 After GoDaddy delegation propagates, validate ACM:
 
 ```bash
-terraform -chdir=terraform/environments/prod apply -var=validate_acm_certificate=true
+AWS_PROFILE=accmanmohanusfca terraform -chdir=terraform/environments/prod apply -var=validate_acm_certificate=true
 ```
 
 4. Export runtime secrets before EKS deployment:
@@ -77,15 +84,19 @@ export JWT_PUBLIC_KEY_FILE=.secrets/jwt-public.pem
 
 ## Day 1 Provisioning
 
-Provision each environment through Terraform and Helm:
+Provision each runtime through Terraform and Helm. Dev, QA, and UAT deploy as
+separate namespaces on the shared non-prod EKS/RDS tier; prod deploys to the
+physically isolated prod EKS/RDS tier:
 
 ```bash
 ./deploy.sh eks dev
+./deploy.sh eks qa
 ./deploy.sh eks uat
 ./deploy.sh eks prod
 ```
 
-For UAT/prod, `deploy.sh` automatically reuses the GitHub Actions role created by the dev environment. If needed, pass it explicitly:
+For prod, `deploy.sh` automatically reuses the GitHub Actions role created by
+the dev/non-prod environment. If needed, pass it explicitly:
 
 ```bash
 export GITHUB_ACTIONS_ROLE_ARN="$(terraform -chdir=terraform/environments/dev output -raw github_actions_role_arn)"
@@ -121,7 +132,9 @@ The GitHub Actions layout follows the same control pattern used in the SiPeKa re
 3. Nightly QA:
    - `.github/workflows/nightly.yml` runs on schedule or manually.
    - Builds `qa-<sha>` and `qa-latest`.
-   - Deploys to `samosachaat-qa` namespace on the QA cluster.
+   - Deploys to `samosachaat-qa` namespace on the shared non-prod EKS cluster.
+   - Uses lighter replica/resource settings than UAT so dev, QA, and UAT can
+     coexist on the cost-controlled non-prod node group.
    - Runs `scripts/smoke-test-k8s.sh samosachaat-qa` across frontend, auth, chat-api, and inference.
 
 4. Dev/QA to UAT:
@@ -173,8 +186,8 @@ Zero dropped requests are supported by:
 The EKS managed node group reads the latest EKS-optimized AMI ID from SSM. Re-running Terraform updates the launch template and triggers managed node rotation.
 
 ```bash
-export GITHUB_ACTIONS_ROLE_ARN=arn:aws:iam::883107058766:role/samosachaat-dev-github-actions
-./scripts/rotate-nodes.sh prod
+export GITHUB_ACTIONS_ROLE_ARN=arn:aws:iam::906352610196:role/samosachaat-dev-github-actions
+./scripts/rotate-nodes.sh prod --yes
 ```
 
 Narration points:
@@ -227,7 +240,9 @@ Required log query examples:
 
 ```logql
 {namespace="samosachaat-prod"} | json | level="error"
-{namespace="samosachaat-prod", app=~"auth|chat-api|inference"} | json
+{namespace="samosachaat-prod"} | json | service="auth"
+{namespace="samosachaat-prod"} | json | service="chat-api"
+{namespace="samosachaat-prod"} | json | service="inference"
 {namespace="samosachaat-prod"} | json | trace_id="<trace-id>"
 ```
 
@@ -263,9 +278,21 @@ kubectl logs -n samosachaat-prod deploy/chat-api --tail=100
 
 ## What Is Still Operationally Pending
 
-- Run Terraform applies in AWS for dev, UAT, and prod.
-- Delegate GoDaddy DNS to the Terraform-created Route53 zone and complete ACM validation.
+- Dev/non-prod Terraform is applied in AWS. `samosachaat-nonprod-pg` is live,
+  and dev, QA, and UAT namespaces have passed in-cluster smoke tests.
+- Prod Terraform has the EKS/VPC/IAM/EFS/ACM pieces, but `samosachaat-prod-pg`
+  is blocked until the old physical `samosachaat-uat-pg` is explicitly
+  snapshotted and deleted. The project is intentionally limited to two active
+  RDS instances, and those slots are currently `samosachaat-nonprod-pg` plus the
+  legacy UAT instance.
+- Delegate GoDaddy DNS to the Terraform-created Route53 zone and complete ACM
+  validation. Until this happens, ALB HTTPS listeners reject the pending ACM
+  certificate and the public `samosachaat.art` record remains on the EC2
+  fallback.
 - Configure GitHub repository secrets and environment protections.
-- Create GitHub/Google OAuth apps for Grafana and app login callback URLs.
+- Create GitHub/Google OAuth apps for Grafana and app login callback URLs, then
+  export the real Grafana OAuth secrets before installing observability.
+- Export a real `SLACK_WEBHOOK_URL` before installing Alertmanager; placeholder
+  alert routes are intentionally not installed.
 - Run one live end-to-end promotion: PR merge to UAT, RC tag to UAT, and `v*` tag to prod.
 - Record the silent Day 1/Day 2 videos, then narrate over them live during the presentation.

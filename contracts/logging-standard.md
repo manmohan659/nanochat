@@ -56,6 +56,9 @@ Each service calls `configure_logging()` once at startup (inside
 `x-trace-id` header (or mints a new one via `new_trace_id()`) and propagates
 it to downstream calls.
 
+Container entrypoints run Uvicorn with `--no-access-log`; request logs must come
+from the JSON middleware events rather than plaintext Uvicorn access lines.
+
 ## Node.js implementation — `pino` (frontend)
 
 The Next.js frontend should log JSON with the same schema. Reference config:
@@ -66,7 +69,7 @@ import pino from "pino";
 
 export const logger = pino({
   base: { service: "frontend" },
-  timestamp: pino.stdTimeFunctions.isoTime,
+  timestamp: () => `,"timestamp":"${new Date().toISOString()}"`,
   formatters: {
     level: (label) => ({ level: label }),   // keep the string level
   },
@@ -92,10 +95,10 @@ Labels Promtail applies: `namespace`, `app`, `pod`, `level`, `service`,
 |-------------------------------|-----------------------------------------------------------------------|
 | All errors in prod            | `{namespace="samosachaat-prod"} | json | level="error"`               |
 | Trace a request across tiers  | `{namespace="samosachaat-prod"} | json | trace_id="<trace>"`          |
-| Auth failures                 | `{app="auth"} | json | level="error"`                                 |
-| Slow inference calls          | `{app="inference"} | json | inference_time_ms > 5000`                 |
+| Auth failures                 | `{namespace="samosachaat-prod"} | json | service="auth" | level="error"`         |
+| Slow inference calls          | `{namespace="samosachaat-prod"} | json | service="inference" | inference_time_ms > 5000` |
 | 5xx by service                | `{namespace="samosachaat-prod"} | json | status_code >= 500`          |
-| Rate-limited OAuth logins     | `{app="auth"} | json | path=~"/auth/oauth/.*" | status_code=429`      |
+| Rate-limited OAuth logins     | `{namespace="samosachaat-prod"} | json | service="auth" | path=~"/auth/oauth/.*" | status_code=429` |
 
 ## Trace propagation contract
 

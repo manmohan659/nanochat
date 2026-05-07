@@ -1,6 +1,12 @@
 variable "identifier" {
-  description = "DB instance identifier (also used as name prefix)."
+  description = "DB instance identifier."
   type        = string
+}
+
+variable "supporting_resource_name" {
+  description = "Optional stable name prefix for RDS security group, subnet group, and parameter group. Use this when renaming an existing DB instance without replacing its supporting resources."
+  type        = string
+  default     = null
 }
 
 variable "vpc_id" {
@@ -19,7 +25,7 @@ variable "eks_node_security_group_id" {
 }
 
 variable "instance_class" {
-  description = "RDS instance class (e.g. db.t3.micro for dev, db.t3.medium for prod)."
+  description = "RDS instance class (e.g. db.t3.micro for non-prod, db.t3.medium for prod)."
   type        = string
   default     = "db.t3.micro"
 }
@@ -52,6 +58,12 @@ variable "backup_retention_period" {
   description = "Backup retention in days. AWS Academy/Free Tier accounts may reject values above 1."
   type        = number
   default     = 1
+}
+
+variable "apply_immediately" {
+  description = "Apply RDS changes immediately instead of waiting for the maintenance window. Useful for non-prod migration/rename work."
+  type        = bool
+  default     = false
 }
 
 variable "performance_insights_enabled" {

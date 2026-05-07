@@ -29,14 +29,28 @@ output "cluster_oidc_provider_arn" {
 }
 
 output "rds_endpoint" {
-  description = "RDS endpoint (host:port)."
+  description = "Shared non-prod RDS endpoint (host:port)."
   value       = module.rds.db_instance_endpoint
 }
 
 output "rds_password" {
-  description = "Generated RDS master password."
+  description = "Generated shared non-prod RDS master password."
   value       = module.rds.db_password
   sensitive   = true
+}
+
+output "rds_identifier" {
+  description = "Shared non-prod RDS instance identifier."
+  value       = "samosachaat-nonprod-pg"
+}
+
+output "nonprod_database_names" {
+  description = "Logical PostgreSQL databases hosted on the shared non-prod RDS instance."
+  value = {
+    dev = "samosachaat_dev"
+    qa  = "samosachaat_qa"
+    uat = "samosachaat_uat"
+  }
 }
 
 output "ecr_repository_urls" {

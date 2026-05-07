@@ -18,8 +18,12 @@ resource "random_password" "db" {
   override_special = "!#$%&*()-_=+[]{}<>:?"
 }
 
+locals {
+  supporting_resource_name = coalesce(var.supporting_resource_name, var.identifier)
+}
+
 resource "aws_security_group" "db" {
-  name        = "${var.identifier}-rds-sg"
+  name        = "${local.supporting_resource_name}-rds-sg"
   description = "PostgreSQL access for samosaChaat from EKS nodes only"
   vpc_id      = var.vpc_id
 
@@ -65,7 +69,8 @@ module "db" {
   manage_master_user_password = false
 
   multi_az               = var.multi_az
-  db_subnet_group_name   = null
+  db_subnet_group_name   = local.supporting_resource_name
+  parameter_group_name   = local.supporting_resource_name
   subnet_ids             = var.private_subnet_ids
   create_db_subnet_group = true
   vpc_security_group_ids = [aws_security_group.db.id]
@@ -75,6 +80,7 @@ module "db" {
   backup_retention_period = var.backup_retention_period
   backup_window           = "03:00-04:00"
   maintenance_window      = "Mon:04:00-Mon:05:00"
+  apply_immediately       = var.apply_immediately
 
   skip_final_snapshot = var.skip_final_snapshot
   deletion_protection = var.deletion_protection

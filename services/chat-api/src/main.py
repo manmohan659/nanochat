@@ -61,7 +61,15 @@ def create_app() -> FastAPI:
             method=request.method,
             path=request.url.path,
         )
-        response = await call_next(request)
+        try:
+            response = await call_next(request)
+        except Exception:
+            logger.exception(
+                "request_failed",
+                method=request.method,
+                path=request.url.path,
+            )
+            raise
         response.headers["x-trace-id"] = trace_id
         logger.info(
             "request_end",

@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     database_url: str = Field(default="postgresql+asyncpg://localhost/samosachaat")
 
     auth_service_url: str = Field(default="http://auth:8001")
-    inference_service_url: str = Field(default="http://inference:8000")
+    inference_service_url: str = Field(default="http://inference:8003")
     internal_api_key: str = Field(default="")
 
     max_conversation_history: int = Field(default=50)

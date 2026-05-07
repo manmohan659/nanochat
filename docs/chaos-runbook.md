@@ -26,7 +26,7 @@ kubectl delete pod -l app.kubernetes.io/name=chat-api -n samosachaat-prod
 **Detect (Loki):**
 ```logql
 {namespace="samosachaat-prod"} | json | level="error"
-{namespace="samosachaat-prod",app="chat-api"} | json | message=~".*startup.*|.*shutdown.*"
+{namespace="samosachaat-prod"} | json | service="chat-api" | message=~".*startup.*|.*shutdown.*"
 ```
 
 **Recovery:**
@@ -91,7 +91,7 @@ kubectl run loadtest --image=busybox --restart=Never -n samosachaat-prod -- \
 
 **Detect (Loki):**
 ```logql
-{app=~"auth|chat-api"} | json | message=~".*connection.*pool.*|.*timeout.*|.*asyncpg.*|.*QueuePool.*overflow.*"
+{namespace="samosachaat-prod"} | json | service=~"auth|chat-api" | message=~".*connection.*pool.*|.*timeout.*|.*asyncpg.*|.*QueuePool.*overflow.*"
 ```
 
 **Recovery:**
@@ -119,7 +119,7 @@ kubectl set resources deploy/inference -n samosachaat-prod --limits=memory=512Mi
 
 **Detect (Loki):**
 ```logql
-{app="inference"} | json | message=~".*OOMKilled.*|.*memory.*|.*killed.*"
+{namespace="samosachaat-prod"} | json | service="inference" | message=~".*OOMKilled.*|.*memory.*|.*killed.*"
 # Also check events:
 # kubectl get events -n samosachaat-prod --sort-by='.lastTimestamp' | grep -i oom
 ```
@@ -149,8 +149,8 @@ kubectl run loadtest --image=curlimages/curl --restart=Never -n samosachaat-prod
 
 **Detect (Loki):**
 ```logql
-{app="chat-api"} | json | inference_time_ms > 5000
-{app="inference"} | json | message=~".*queue.*full.*|.*timeout.*|.*worker.*busy.*"
+{namespace="samosachaat-prod"} | json | service="chat-api" | inference_time_ms > 5000
+{namespace="samosachaat-prod"} | json | service="inference" | message=~".*queue.*full.*|.*timeout.*|.*worker.*busy.*"
 ```
 
 **Recovery:**
@@ -185,13 +185,13 @@ kubectl run loadtest --image=curlimages/curl --restart=Never -n samosachaat-prod
 {namespace="samosachaat-prod"} | json | trace_id="<TRACE_ID>"
 
 # Auth failures
-{app="auth"} | json | level="error" | message=~".*oauth.*|.*jwt.*|.*unauthorized.*"
+{namespace="samosachaat-prod"} | json | service="auth" | level="error" | message=~".*oauth.*|.*jwt.*|.*unauthorized.*"
 
 # Inference issues
-{app="inference"} | json | message=~".*error.*|.*timeout.*|.*OOM.*|.*worker.*"
+{namespace="samosachaat-prod"} | json | service="inference" | message=~".*error.*|.*timeout.*|.*OOM.*|.*worker.*"
 
 # Slow database queries
-{app=~"auth|chat-api"} | json | message=~".*slow.*query.*|.*timeout.*"
+{namespace="samosachaat-prod"} | json | service=~"auth|chat-api" | message=~".*slow.*query.*|.*timeout.*"
 
 # Recent pod restarts
 {namespace="samosachaat-prod"} | json | message=~".*started.*|.*shutdown.*|.*ready.*"

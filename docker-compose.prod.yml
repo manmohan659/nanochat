@@ -7,15 +7,19 @@
 services:
   frontend:
     build: !reset null
-    image: ${ECR_REGISTRY:-883107058766.dkr.ecr.us-west-2.amazonaws.com}/samosachaat/frontend:${IMAGE_TAG:-dev-latest}
+    image: ${ECR_REGISTRY:-906352610196.dkr.ecr.us-west-2.amazonaws.com}/samosachaat/frontend:${IMAGE_TAG:-dev-latest}
 
   auth:
     build: !reset null
-    image: ${ECR_REGISTRY:-883107058766.dkr.ecr.us-west-2.amazonaws.com}/samosachaat/auth:${IMAGE_TAG:-dev-latest}
+    image: ${ECR_REGISTRY:-906352610196.dkr.ecr.us-west-2.amazonaws.com}/samosachaat/auth:${IMAGE_TAG:-dev-latest}
 
   chat-api:
     build: !reset null
-    image: ${ECR_REGISTRY:-883107058766.dkr.ecr.us-west-2.amazonaws.com}/samosachaat/chat-api:${IMAGE_TAG:-dev-latest}
+    image: ${ECR_REGISTRY:-906352610196.dkr.ecr.us-west-2.amazonaws.com}/samosachaat/chat-api:${IMAGE_TAG:-dev-latest}
+
+  inference:
+    build: !reset null
+    image: ${ECR_REGISTRY:-906352610196.dkr.ecr.us-west-2.amazonaws.com}/samosachaat/inference:${IMAGE_TAG:-dev-latest}
 
   nginx:
     image: nginx:alpine
@@ -30,3 +34,4 @@ services:
       - frontend
       - auth
       - chat-api
+      - inference
