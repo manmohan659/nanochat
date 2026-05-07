@@ -1,3 +1,10 @@
+## [1.1.6](https://github.com/manmohan659/nanochat/compare/v1.1.5...v1.1.6) (2026-05-07)
+
+
+### Bug Fixes
+
+* **inference:** proxy generation when local model is unavailable ([981ba3b](https://github.com/manmohan659/nanochat/commit/981ba3b671b8dd3234bfe43d6c2222a42d02e44a))
+
 ## [1.1.4](https://github.com/manmohan659/nanochat/compare/v1.1.3...v1.1.4) (2026-05-07)
 
 
