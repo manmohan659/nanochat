@@ -16,10 +16,17 @@ kube-prometheus-stack:
         registry: docker.io
         repository: prom/prometheus
         tag: v2.54.0
-      ## Only scrape ServiceMonitors that belong to the samosaChaat app.
+      ## Scrape samosaChaat app monitors plus kube-prometheus-stack's node and
+      ## cluster monitors so node CPU/memory/disk dashboards have live data.
       serviceMonitorSelector:
-        matchLabels:
-          app.kubernetes.io/part-of: samosachaat
+        matchExpressions:
+          - key: app.kubernetes.io/part-of
+            operator: In
+            values:
+              - samosachaat
+              - kube-prometheus-stack
+              - prometheus-node-exporter
+              - kube-state-metrics
       serviceMonitorSelectorNilUsesHelmValues: false
       ## Also evaluate our custom PrometheusRules.
       ruleSelector:
