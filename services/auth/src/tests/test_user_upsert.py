@@ -52,6 +52,34 @@ async def test_upsert_updates_existing_user(db_session):
 
 
 @pytest.mark.asyncio
+async def test_upsert_links_existing_user_by_email(db_session):
+    google = OAuthProfile(
+        provider="google",
+        provider_id="g-12345",
+        email="alice@example.com",
+        name="Alice",
+        avatar_url=None,
+    )
+    github = OAuthProfile(
+        provider="github",
+        provider_id="gh-98765",
+        email="alice@example.com",
+        name="Alice GH",
+        avatar_url="https://img/gh.png",
+    )
+
+    u1 = await user_service.upsert_from_oauth(db_session, google)
+    u2 = await user_service.upsert_from_oauth(db_session, github)
+
+    assert u2.id == u1.id
+    assert u2.email == "alice@example.com"
+    assert u2.provider == "github"
+    assert u2.provider_id == "gh-98765"
+    assert u2.name == "Alice GH"
+    assert u2.avatar_url == "https://img/gh.png"
+
+
+@pytest.mark.asyncio
 async def test_update_profile(db_session):
     profile = OAuthProfile(
         provider="github",
