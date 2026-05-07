@@ -1,3 +1,10 @@
+## [1.1.2](https://github.com/manmohan659/nanochat/compare/v1.1.1...v1.1.2) (2026-05-07)
+
+
+### Bug Fixes
+
+* **devops:** route slotted services and bind user logs ([023997f](https://github.com/manmohan659/nanochat/commit/023997f48684d96d0c60666b20a7ca8e10b94c5a))
+
 # [1.1.0](https://github.com/manmohan659/nanochat/compare/v1.0.5...v1.1.0) (2026-05-07)
 
 
