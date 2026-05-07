@@ -46,11 +46,11 @@ inference:
   replicaCount: 3
   resources:
     requests:
-      cpu: '1'
-      memory: 2Gi
+      cpu: 100m
+      memory: 1Gi
     limits:
-      cpu: '4'
-      memory: 8Gi
+      cpu: '2'
+      memory: 4Gi
   hpa:
     enabled: true
     minReplicas: 3

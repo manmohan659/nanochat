@@ -61,8 +61,6 @@ export GITHUB_CLIENT_ID=...
 export GITHUB_CLIENT_SECRET=...
 export GITHUB_GRAFANA_CLIENT_ID=...
 export GITHUB_GRAFANA_CLIENT_SECRET=...
-export GOOGLE_GRAFANA_CLIENT_ID=...
-export GOOGLE_GRAFANA_CLIENT_SECRET=...
 export SLACK_WEBHOOK_URL=...
 export INFERENCE_SERVICE_URL=...
 ```
@@ -232,7 +230,7 @@ Deploys inside EKS:
 Required dashboard:
 
 - Open `https://grafana.samosachaat.art`.
-- Login through GitHub or Google OAuth only.
+- Login through GitHub OAuth only.
 - Show the `Node Health` dashboard for CPU, memory, and disk.
 - Show application dashboards for request rate, 5xx, latency, and inference health.
 
@@ -290,8 +288,9 @@ kubectl logs -n samosachaat-prod deploy/chat-api --tail=100
   certificate and the public `samosachaat.art` record remains on the EC2
   fallback.
 - Configure GitHub repository secrets and environment protections.
-- Create GitHub/Google OAuth apps for Grafana and app login callback URLs, then
-  export the real Grafana OAuth secrets before installing observability.
+- Create the GitHub OAuth app for Grafana and the app login callback OAuth
+  clients, then export the real Grafana OAuth secrets before installing
+  observability.
 - Export a real `SLACK_WEBHOOK_URL` before installing Alertmanager; placeholder
   alert routes are intentionally not installed.
 - Run one live end-to-end promotion: PR merge to UAT, RC tag to UAT, and `v*` tag to prod.
