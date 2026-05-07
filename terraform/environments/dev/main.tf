@@ -131,7 +131,8 @@ module "route53" {
 
   domain_name              = var.domain_name
   create_zone              = var.create_route53_zone
-  subdomains               = ["grafana"]
+  create_apex_alias        = false
+  subdomains               = ["dev"]
   acm_validation_records   = module.acm.validation_records
   acm_certificate_arn      = module.acm.certificate_arn
   validate_acm_certificate = var.validate_acm_certificate

@@ -9,6 +9,8 @@ config:
 
 frontend:
   replicaCount: 2
+  env:
+    NEXT_PUBLIC_API_URL: "https://uat.samosachaat.art/api"
   resources:
     requests:
       cpu: 100m
@@ -19,6 +21,10 @@ frontend:
 
 auth:
   replicaCount: 2
+  env:
+    FRONTEND_URL: "https://uat.samosachaat.art"
+    AUTH_BASE_URL: "https://uat.samosachaat.art"
+    COOKIE_SECURE: "true"
   resources:
     requests:
       cpu: 100m
@@ -29,6 +35,8 @@ auth:
 
 chatApi:
   replicaCount: 2
+  env:
+    FRONTEND_URL: "https://uat.samosachaat.art"
   resources:
     requests:
       cpu: 200m
@@ -54,3 +62,8 @@ inference:
 pdb:
   enabled: true
   minAvailable: 1
+
+ingress:
+  host: uat.samosachaat.art
+  grafana:
+    enabled: false
