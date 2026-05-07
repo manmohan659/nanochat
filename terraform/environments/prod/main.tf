@@ -32,7 +32,7 @@ module "eks" {
   node_instance_type = "m7i-flex.large"
   node_min_size      = 3
   node_max_size      = 10
-  node_desired_size  = 3
+  node_desired_size  = 6
 
   enable_cluster_creator_admin_permissions = true
 
