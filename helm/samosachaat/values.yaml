@@ -116,6 +116,14 @@ inference:
 ingress:
   enabled: true
   host: samosachaat.art
+  ## Optional Grafana host. Enable only in the environment where the
+  ## observability chart is installed.
+  grafana:
+    enabled: true
+    host: grafana.samosachaat.art
+    serviceName: grafana
+    servicePort: 3000
+  ## Deprecated flat Grafana keys retained for older release values.
   grafanaHost: grafana.samosachaat.art
   acmCertArn: ""
   ## Blue/green traffic target. Empty means "use deployment.slot".

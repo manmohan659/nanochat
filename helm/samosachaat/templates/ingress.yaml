@@ -3,6 +3,9 @@
 {{- $frontendSvc := include "samosachaat.svcNameForSlot" (dict "svc" "frontend" "slot" $targetSlot) -}}
 {{- $authSvc := include "samosachaat.svcNameForSlot" (dict "svc" "auth" "slot" $targetSlot) -}}
 {{- $chatApiSvc := include "samosachaat.svcNameForSlot" (dict "svc" "chat-api" "slot" $targetSlot) -}}
+{{- $grafanaHost := default .Values.ingress.grafanaHost .Values.ingress.grafana.host -}}
+{{- $grafanaServiceName := default .Values.ingress.grafanaServiceName .Values.ingress.grafana.serviceName -}}
+{{- $grafanaServicePort := default .Values.ingress.grafanaServicePort .Values.ingress.grafana.servicePort -}}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -47,14 +50,16 @@ spec:
                 name: {{ $frontendSvc }}
                 port:
                   number: {{ .Values.frontend.port }}
-    - host: {{ .Values.ingress.grafanaHost | quote }}
+    {{- if .Values.ingress.grafana.enabled }}
+    - host: {{ $grafanaHost | quote }}
       http:
         paths:
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: {{ .Values.ingress.grafanaServiceName }}
+                name: {{ $grafanaServiceName }}
                 port:
-                  number: {{ .Values.ingress.grafanaServicePort }}
+                  number: {{ $grafanaServicePort }}
+    {{- end }}
 {{- end }}

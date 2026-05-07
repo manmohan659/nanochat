@@ -15,6 +15,12 @@ variable "subdomains" {
   default     = ["grafana"]
 }
 
+variable "create_apex_alias" {
+  description = "Create an A alias for the apex domain. Disable for environment-only hosts like dev/uat."
+  type        = bool
+  default     = true
+}
+
 variable "alb_dns_name" {
   description = "ALB DNS name from the AWS Load Balancer Controller. Empty string skips A-record creation (first-apply bootstrap)."
   type        = string

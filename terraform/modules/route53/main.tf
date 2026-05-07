@@ -30,7 +30,7 @@ locals {
 # Ingress is created (look up via `kubectl get ingress` or a data source). Pass
 # empty strings to skip A-record creation on the first apply, then re-apply.
 resource "aws_route53_record" "apex" {
-  count = var.alb_dns_name == "" ? 0 : 1
+  count = var.create_apex_alias && var.alb_dns_name != "" ? 1 : 0
 
   zone_id         = local.zone_id
   name            = var.domain_name
