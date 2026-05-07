@@ -6,6 +6,7 @@ import random
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
 
+import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse, StreamingResponse
 from prometheus_fastapi_instrumentator import Instrumentator
@@ -47,6 +48,7 @@ class GenerateRequest(BaseModel):
     temperature: float | None = None
     max_tokens: int | None = None
     top_k: int | None = None
+    force_web_search: bool = False
 
 
 class SwapModelRequest(BaseModel):
@@ -159,6 +161,43 @@ async def generate_stream(worker, request: GenerateRequest, settings: Settings) 
             yield format_sse({"token": new_text, "gpu": worker.gpu_id})
 
     yield format_sse({"done": True})
+
+
+async def proxy_upstream_generate(request: GenerateRequest, settings: Settings) -> AsyncGenerator[str, None]:
+    if not settings.upstream_generate_url:
+        yield format_sse({"error": "inference_model_unavailable"})
+        yield format_sse({"done": True})
+        return
+
+    payload = request.model_dump(exclude_none=True)
+    timeout = httpx.Timeout(120.0, connect=10.0)
+
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            async with client.stream(
+                "POST",
+                settings.upstream_generate_url,
+                headers={"Content-Type": "application/json"},
+                json=payload,
+            ) as response:
+                if response.status_code >= 400:
+                    body = await response.aread()
+                    logger.error(
+                        "upstream_generate_failed",
+                        status_code=response.status_code,
+                        body=body[:200].decode("utf-8", errors="replace"),
+                    )
+                    yield format_sse({"error": "upstream_generate_failed"})
+                    yield format_sse({"done": True})
+                    return
+
+                async for chunk in response.aiter_text():
+                    if chunk:
+                        yield chunk
+    except Exception as exc:  # pragma: no cover - network safety net
+        logger.error("upstream_generate_error", error=str(exc))
+        yield format_sse({"error": "upstream_generate_failed"})
+        yield format_sse({"done": True})
 
 
 class InferenceRuntime:
@@ -290,7 +329,16 @@ def create_app(settings: Settings | None = None, runtime: InferenceRuntime | Non
     @app.post("/generate", dependencies=[Depends(require_internal_api_key)])
     async def generate(request_body: GenerateRequest, runtime: InferenceRuntime = Depends(get_runtime)):
         validate_generate_request(request_body)
-        worker_pool = runtime.require_ready_pool()
+        try:
+            worker_pool = runtime.require_ready_pool()
+        except HTTPException as exc:
+            if exc.status_code == status.HTTP_503_SERVICE_UNAVAILABLE and resolved_settings.upstream_generate_url:
+                logger.warning("proxying_generate_to_upstream", reason=exc.detail)
+                return StreamingResponse(
+                    proxy_upstream_generate(request_body, resolved_settings),
+                    media_type="text/event-stream",
+                )
+            raise
 
         try:
             worker = await worker_pool.acquire_worker()

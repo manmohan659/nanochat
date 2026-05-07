@@ -44,6 +44,8 @@ chatApi:
 
 inference:
   replicaCount: 3
+  env:
+    UPSTREAM_GENERATE_URL: "https://manmohan659--samosachaat-inference-inference-generate.modal.run"
   resources:
     requests:
       cpu: 100m
