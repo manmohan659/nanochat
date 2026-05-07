@@ -1,3 +1,11 @@
+## [1.1.4](https://github.com/manmohan659/nanochat/compare/v1.1.3...v1.1.4) (2026-05-07)
+
+
+### Bug Fixes
+
+* **auth:** link OAuth users by verified email ([857a140](https://github.com/manmohan659/nanochat/commit/857a14099b753c9ff70df41923c9bab3147432db))
+* **auth:** link OAuth users by verified email ([b438a55](https://github.com/manmohan659/nanochat/commit/b438a55a455f8e031a2788dacd9ac5122a071c3d))
+
 ## [1.1.2](https://github.com/manmohan659/nanochat/compare/v1.1.1...v1.1.2) (2026-05-07)
 
 
