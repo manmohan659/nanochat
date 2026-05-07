@@ -37,3 +37,6 @@ override.tf.json
 
 # Helm dependencies are downloaded by `helm dependency build`.
 helm/*/charts/
+
+# Local AWS cost-control state, including previous EKS nodegroup sizes.
+.aws-cost/
