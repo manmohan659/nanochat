@@ -8,7 +8,12 @@ set -euo pipefail
 ENVIRONMENT="${1:?Usage: rotate-nodes.sh <environment> (dev|uat|prod)}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TF_DIR="$SCRIPT_DIR/../terraform/environments/$ENVIRONMENT"
-GITHUB_ACTIONS_ROLE_ARN="${GITHUB_ACTIONS_ROLE_ARN:-arn:aws:iam::883107058766:role/samosachaat-dev-github-actions}"
+AWS_PROFILE="${AWS_PROFILE:-accmanmohanusfca}"
+AWS_REGION="${AWS_REGION:-us-west-2}"
+AWS_ACCOUNT_ID="${AWS_ACCOUNT_ID:-906352610196}"
+GITHUB_ACTIONS_ROLE_ARN="${GITHUB_ACTIONS_ROLE_ARN:-arn:aws:iam::${AWS_ACCOUNT_ID}:role/samosachaat-dev-github-actions}"
+
+export AWS_PROFILE AWS_REGION
 
 if [[ ! "$ENVIRONMENT" =~ ^(dev|uat|prod)$ ]]; then
     echo "Unsupported environment: $ENVIRONMENT" >&2
@@ -49,6 +54,6 @@ fi
 echo ""
 echo "Step 3: Monitor node rotation"
 CLUSTER_NAME=$(terraform output -raw cluster_name 2>/dev/null || echo "samosachaat-$ENVIRONMENT-eks")
-aws eks update-kubeconfig --name "$CLUSTER_NAME" --region us-west-2 2>/dev/null || true
+aws eks update-kubeconfig --name "$CLUSTER_NAME" --region "$AWS_REGION" 2>/dev/null || true
 echo "Watching nodes (Ctrl+C to stop):"
 kubectl get nodes -w

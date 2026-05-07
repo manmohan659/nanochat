@@ -33,7 +33,7 @@ variable "public_subnets" {
 }
 
 variable "single_nat_gateway" {
-  description = "When true, all private subnets route through a single NAT gateway (dev). When false, one NAT per AZ (prod)."
+  description = "When true, all private subnets route through a single NAT gateway. Keep true while the target account has the default 5 Elastic IP quota."
   type        = bool
   default     = true
 }

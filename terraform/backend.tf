@@ -7,14 +7,14 @@
 # Bootstrap (run once, manually):
 #
 #   aws s3api create-bucket \
-#     --bucket samosachaat-terraform-state \
+#     --bucket samosachaat-terraform-state-906352610196 \
 #     --region us-west-2 \
 #     --create-bucket-configuration LocationConstraint=us-west-2
 #   aws s3api put-bucket-versioning \
-#     --bucket samosachaat-terraform-state \
+#     --bucket samosachaat-terraform-state-906352610196 \
 #     --versioning-configuration Status=Enabled
 #   aws s3api put-bucket-encryption \
-#     --bucket samosachaat-terraform-state \
+#     --bucket samosachaat-terraform-state-906352610196 \
 #     --server-side-encryption-configuration \
 #       '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
 #   aws dynamodb create-table \
@@ -26,7 +26,7 @@
 
 terraform {
   backend "s3" {
-    bucket         = "samosachaat-terraform-state"
+    bucket         = "samosachaat-terraform-state-906352610196"
     key            = "global/placeholder.tfstate"
     region         = "us-west-2"
     encrypt        = true

@@ -7,7 +7,7 @@ variable "region" {
 variable "state_bucket_name" {
   description = "S3 bucket that stores Terraform state."
   type        = string
-  default     = "samosachaat-terraform-state"
+  default     = "samosachaat-terraform-state-906352610196"
 }
 
 variable "lock_table_name" {

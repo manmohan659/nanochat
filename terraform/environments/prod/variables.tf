@@ -51,3 +51,9 @@ variable "github_actions_role_arn" {
   type        = string
   default     = ""
 }
+
+variable "single_nat_gateway" {
+  description = "Use one NAT gateway for prod to stay under the target account Elastic IP quota during the assignment. Set false only after an EIP quota increase or after reducing other EIP usage."
+  type        = bool
+  default     = true
+}
