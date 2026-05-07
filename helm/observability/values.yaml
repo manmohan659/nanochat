@@ -126,6 +126,8 @@ kube-prometheus-stack:
         auth_url: https://github.com/login/oauth/authorize
         token_url: https://github.com/login/oauth/access_token
         api_url: https://api.github.com/user
+        role_attribute_path: "\"'Editor'\""
+        skip_org_role_sync: false
     ## OAuth client IDs/secrets come from a Kubernetes secret mounted as env.
     ## Expected keys: GITHUB_GRAFANA_CLIENT_ID, GITHUB_GRAFANA_CLIENT_SECRET,
     ## SLACK_WEBHOOK_URL.
