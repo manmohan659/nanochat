@@ -10,7 +10,14 @@ from slowapi.middleware import SlowAPIMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from .config import get_settings
-from .logging_setup import configure_logging, get_logger, new_trace_id, set_trace_id, set_user_id
+from .logging_setup import (
+    configure_logging,
+    get_logger,
+    new_trace_id,
+    set_session_trace_id,
+    set_trace_id,
+    set_user_id,
+)
 from .rate_limit import limiter
 from .routes import oauth, session, users
 
@@ -44,7 +51,9 @@ def create_app() -> FastAPI:
     async def request_context(request: Request, call_next) -> Response:
         incoming = request.headers.get("x-trace-id") or request.headers.get("x-request-id")
         trace_id = incoming or new_trace_id()
+        session_trace_id = request.headers.get("x-session-trace-id")
         set_trace_id(trace_id)
+        set_session_trace_id(session_trace_id)
         set_user_id(None)
 
         logger.info("request_start", method=request.method, path=request.url.path)
@@ -54,6 +63,8 @@ def create_app() -> FastAPI:
             logger.exception("request_failed", method=request.method, path=request.url.path)
             raise
         response.headers["x-trace-id"] = trace_id
+        if session_trace_id:
+            response.headers["x-session-trace-id"] = session_trace_id
         logger.info(
             "request_end",
             method=request.method,

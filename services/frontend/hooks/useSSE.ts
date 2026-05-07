@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useRef, useState } from 'react';
+import { sessionHeaders } from '@/lib/auth-client';
 
 export interface SSEOptions {
   onToken?: (token: string, gpu?: number) => void;
@@ -35,7 +36,10 @@ export function useSSE(endpoint: string, options: SSEOptions = {}) {
       setIsStreaming(true);
 
       try {
-        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          ...sessionHeaders(),
+        };
         if (body.auth) {
           Object.assign(headers, body.auth);
         }

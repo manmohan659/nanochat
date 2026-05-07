@@ -68,11 +68,16 @@ def test_generate_validation_rejects_empty_messages() -> None:
     with TestClient(app) as client:
         response = client.post(
             "/generate",
-            headers={"X-Internal-API-Key": "secret"},
+            headers={
+                "X-Internal-API-Key": "secret",
+                "x-session-trace-id": "session-defense-456",
+                "x-user-id": "user-defense-789",
+            },
             json={"messages": []},
         )
 
     assert response.status_code == 400
+    assert response.headers["x-session-trace-id"] == "session-defense-456"
     assert response.json()["detail"] == "At least one message is required"
 
 

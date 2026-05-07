@@ -7,7 +7,7 @@ from typing import AsyncIterator
 import httpx
 
 from ..config import Settings, get_settings
-from ..logging_setup import get_trace_id
+from ..logging_setup import get_session_trace_id, get_trace_id, get_user_id
 
 
 class InferenceClient:
@@ -32,6 +32,12 @@ class InferenceClient:
         trace_id = get_trace_id()
         if trace_id:
             headers["x-trace-id"] = trace_id
+        session_trace_id = get_session_trace_id()
+        if session_trace_id:
+            headers["x-session-trace-id"] = session_trace_id
+        user_id = get_user_id()
+        if user_id:
+            headers["x-user-id"] = user_id
         return headers
 
     def _get_client(self) -> httpx.AsyncClient:

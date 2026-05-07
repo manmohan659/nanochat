@@ -11,11 +11,16 @@ import structlog
 from .config import get_settings
 
 _trace_id_ctx: ContextVar[str | None] = ContextVar("trace_id", default=None)
+_session_trace_id_ctx: ContextVar[str | None] = ContextVar("session_trace_id", default=None)
 _user_id_ctx: ContextVar[str | None] = ContextVar("user_id", default=None)
 
 
 def set_trace_id(trace_id: str | None) -> None:
     _trace_id_ctx.set(trace_id)
+
+
+def set_session_trace_id(session_trace_id: str | None) -> None:
+    _session_trace_id_ctx.set(session_trace_id)
 
 
 def set_user_id(user_id: str | None) -> None:
@@ -24,6 +29,10 @@ def set_user_id(user_id: str | None) -> None:
 
 def get_trace_id() -> str | None:
     return _trace_id_ctx.get()
+
+
+def get_session_trace_id() -> str | None:
+    return _session_trace_id_ctx.get()
 
 
 def get_user_id() -> str | None:
@@ -39,6 +48,9 @@ def _inject_context(_logger, _method, event_dict):
     trace_id = _trace_id_ctx.get()
     if trace_id is not None:
         event_dict.setdefault("trace_id", trace_id)
+    session_trace_id = _session_trace_id_ctx.get()
+    if session_trace_id is not None:
+        event_dict.setdefault("session_trace_id", session_trace_id)
     user_id = _user_id_ctx.get()
     if user_id is not None:
         event_dict.setdefault("user_id", user_id)
