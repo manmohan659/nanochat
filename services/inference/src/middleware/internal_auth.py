@@ -25,3 +25,4 @@ def require_internal_api_key(
     user_id = request.headers.get("x-user-id")
     if user_id:
         set_user_id(user_id)
+        request.state.user_id = user_id

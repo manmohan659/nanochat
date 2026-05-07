@@ -150,6 +150,7 @@ async def require_user(
     if cached is not None:
         set_user_id(cached.id)
         request.state.user = cached
+        request.state.user_id = cached.id
         return cached
 
     http_client: httpx.AsyncClient | None = getattr(
@@ -159,4 +160,5 @@ async def require_user(
     await cache.set(token, user)
     set_user_id(user.id)
     request.state.user = user
+    request.state.user_id = user.id
     return user

@@ -46,6 +46,7 @@ async def refresh(
     if user is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "user not found")
     set_user_id(str(user.id))
+    request.state.user_id = str(user.id)
 
     access, ttl = jwt_service.issue_access_token(
         user_id=str(user.id), email=user.email, name=user.name
@@ -55,6 +56,7 @@ async def refresh(
 
 @router.post("/validate")
 async def validate(
+    request: Request,
     payload: ValidateRequest,
     session: AsyncSession = Depends(get_session),
     x_internal_api_key: str | None = Header(default=None, alias="X-Internal-API-Key"),
@@ -79,5 +81,6 @@ async def validate(
             content={"valid": False, "reason": "user not found"},
         )
     set_user_id(str(user.id))
+    request.state.user_id = str(user.id)
 
     return {"valid": True, "user": user.to_dict(), "claims": claims}

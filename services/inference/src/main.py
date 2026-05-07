@@ -276,6 +276,9 @@ def create_app(settings: Settings | None = None, runtime: InferenceRuntime | Non
         response.headers["x-trace-id"] = trace_id
         if session_trace_id:
             response.headers["x-session-trace-id"] = session_trace_id
+        user_id = getattr(request.state, "user_id", None)
+        if user_id is not None:
+            set_user_id(str(user_id))
         logger.info(
             "request_end",
             method=request.method,
