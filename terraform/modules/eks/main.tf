@@ -9,7 +9,7 @@ terraform {
 }
 
 data "aws_ssm_parameter" "eks_ami_id" {
-  name = "/aws/service/eks/optimized-ami/${var.cluster_version}/amazon-linux-2/recommended/image_id"
+  name = "/aws/service/eks/optimized-ami/${var.cluster_version}/amazon-linux-2023/x86_64/standard/recommended/image_id"
 }
 
 data "aws_partition" "current" {}
@@ -42,6 +42,7 @@ module "eks" {
 
   eks_managed_node_group_defaults = {
     ami_id                     = data.aws_ssm_parameter.eks_ami_id.value
+    ami_type                   = var.node_ami_type
     enable_bootstrap_user_data = true
 
     iam_role_additional_policies = {

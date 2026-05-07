@@ -6,7 +6,7 @@ variable "cluster_name" {
 variable "cluster_version" {
   description = "Kubernetes version for the EKS control plane."
   type        = string
-  default     = "1.29"
+  default     = "1.34"
 }
 
 variable "vpc_id" {
@@ -23,6 +23,12 @@ variable "node_instance_type" {
   description = "EC2 instance type for the managed node group."
   type        = string
   default     = "t3.large"
+}
+
+variable "node_ami_type" {
+  description = "EKS managed node group AMI type. AL2023 is required for Kubernetes 1.33+."
+  type        = string
+  default     = "AL2023_x86_64_STANDARD"
 }
 
 variable "node_min_size" {

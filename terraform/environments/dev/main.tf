@@ -25,7 +25,7 @@ module "eks" {
   source = "../../modules/eks"
 
   cluster_name       = local.cluster_name
-  cluster_version    = "1.29"
+  cluster_version    = "1.34"
   vpc_id             = module.vpc.vpc_id
   private_subnet_ids = module.vpc.private_subnet_ids
 

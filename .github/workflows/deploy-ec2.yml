@@ -27,7 +27,7 @@ jobs:
         id: ecr
         run: |
           echo "password=$(aws ecr get-login-password --region ${{ vars.AWS_REGION || 'us-west-2' }})" >> $GITHUB_OUTPUT
-          echo "registry=${{ secrets.AWS_ACCOUNT_ID || '883107058766' }}.dkr.ecr.${{ vars.AWS_REGION || 'us-west-2' }}.amazonaws.com" >> $GITHUB_OUTPUT
+          echo "registry=${{ secrets.AWS_ACCOUNT_ID || '906352610196' }}.dkr.ecr.${{ vars.AWS_REGION || 'us-west-2' }}.amazonaws.com" >> $GITHUB_OUTPUT
 
       - name: Deploy to EC2
         uses: appleboy/ssh-action@v1
