@@ -1,3 +1,10 @@
+# [1.3.0](https://github.com/manmohan659/nanochat/compare/v1.2.2...v1.3.0) (2026-05-08)
+
+
+### Features
+
+* **observability:** add dev and uat logs to central loki ([da0ba56](https://github.com/manmohan659/nanochat/commit/da0ba56309363fc963b7ad3564454f0d8ba3c222))
+
 ## [1.2.2](https://github.com/manmohan659/nanochat/compare/v1.2.1...v1.2.2) (2026-05-08)
 
 

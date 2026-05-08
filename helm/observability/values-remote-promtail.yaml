@@ -1,0 +1,24 @@
+## Promtail-only install for the dev EKS cluster.
+##
+## Dev and UAT workloads run in the same dev cluster. Install this once in that
+## cluster so Promtail scrapes all pod logs and pushes them into the central prod
+## Loki through the restricted push route on the existing Grafana ALB.
+
+kube-prometheus-stack:
+  enabled: false
+
+loki-stack:
+  enabled: true
+  loki:
+    enabled: false
+  test_pod:
+    enabled: false
+  prometheus:
+    enabled: false
+  grafana:
+    enabled: false
+  promtail:
+    enabled: true
+    config:
+      clients:
+        - url: https://grafana.samosachaat.art/loki/api/v1/push

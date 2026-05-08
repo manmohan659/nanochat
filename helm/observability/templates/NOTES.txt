@@ -1,3 +1,9 @@
+{{- $kps := index .Values "kube-prometheus-stack" | default dict -}}
+{{- $kpsEnabled := true -}}
+{{- if hasKey $kps "enabled" -}}
+{{- $kpsEnabled = get $kps "enabled" -}}
+{{- end -}}
+{{- if $kpsEnabled }}
 samosaChaat observability stack installed.
 
 Components:
@@ -18,3 +24,12 @@ Required secrets in namespace {{ .Release.Namespace }}:
 Useful in-cluster URLs:
   Prometheus: http://prom-prometheus.{{ .Release.Namespace }}.svc:9090
   Loki:       http://observability-loki.{{ .Release.Namespace }}.svc:3100
+
+Dashboards:
+  Provisioned from the samosachaat-dashboards ConfigMap in this namespace.
+{{- else }}
+samosaChaat remote Promtail installed.
+
+This Promtail-only release pushes dev/UAT pod logs to the central prod Loki
+through https://grafana.samosachaat.art/loki/api/v1/push.
+{{- end }}
