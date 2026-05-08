@@ -62,3 +62,14 @@ inference:
 pdb:
   enabled: true
   minAvailable: 1
+
+serviceMonitor:
+  enabled: true
+
+ingress:
+  lokiPush:
+    enabled: true
+    sourceCidrs:
+      ## Dev EKS NAT egress IP; remote Promtail in that cluster pushes
+      ## dev/UAT logs through https://grafana.samosachaat.art/loki/api/v1/push.
+      - 184.34.174.95/32

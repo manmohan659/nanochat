@@ -91,12 +91,19 @@ response so client-side traces can join up.
 
 ## Cross-service querying (LogQL / Grafana Explore)
 
-Labels Promtail applies: `namespace`, `app`, `pod`, `level`, `service`,
-`container`. Everything else is a JSON field — use `| json` to extract it.
+Labels Promtail applies: `namespace`, `component`, `service`, `app`, `pod`,
+`container`, and `level` when the log line includes it. Everything else is a
+JSON field — use `| json` to extract it. `component` comes from the Kubernetes
+pod label and is the preferred cross-environment service filter.
 
 | Goal                          | Query                                                                 |
 |-------------------------------|-----------------------------------------------------------------------|
 | All errors in prod            | `{namespace="samosachaat-prod"} | json | level="error"`               |
+| All dev logs                  | `{namespace="samosachaat-dev"}`                                      |
+| All UAT logs                  | `{namespace="samosachaat-uat"}`                                      |
+| Dev chat-api logs             | `{namespace="samosachaat-dev", component="chat-api"}`                |
+| UAT inference logs            | `{namespace="samosachaat-uat", component="inference"}`               |
+| Prod frontend logs            | `{namespace="samosachaat-prod", component="frontend"}`               |
 | Trace a request across tiers  | `{namespace="samosachaat-prod"} | json | trace_id="<trace>"`          |
 | Trace a browser session       | `{namespace="samosachaat-prod"} | json | session_trace_id="<session>"` |
 | Trace a user                  | `{namespace="samosachaat-prod"} | json | user_id="<user-id>"`          |
