@@ -31,6 +31,11 @@ helm upgrade --install aws-load-balancer-controller eks/aws-load-balancer-contro
   --set "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn=${ALB_CONTROLLER_ROLE_ARN}" \
   --wait --timeout 5m
 
+if [[ "${REPAIR_ALB_WEBHOOK:-true}" == "true" ]]; then
+  kubectl rollout restart deployment/aws-load-balancer-controller -n kube-system >/dev/null
+  kubectl rollout status deployment/aws-load-balancer-controller -n kube-system --timeout=3m
+fi
+
 helm upgrade --install metrics-server metrics-server/metrics-server \
   -n kube-system \
   --set args="{--kubelet-preferred-address-types=InternalIP\\,ExternalIP\\,Hostname,--kubelet-use-node-status-port}" \
