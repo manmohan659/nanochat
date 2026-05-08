@@ -93,6 +93,7 @@ jobs:
             --wait --timeout 10m
 
       - name: Reconcile DNS aliases through Terraform
+        if: vars.TERRAFORM_APPLY_ENABLED == 'true'
         run: ./scripts/reconcile-route53-alias.sh dev
 
       - name: Smoke test Dev
