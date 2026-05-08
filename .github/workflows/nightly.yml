@@ -22,6 +22,7 @@ env:
 jobs:
   build:
     name: Build QA ${{ matrix.service }}
+    if: vars.EKS_DEPLOYMENTS_ENABLED == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -69,6 +70,7 @@ jobs:
 
   deploy-qa:
     name: Deploy QA namespace
+    if: vars.EKS_DEPLOYMENTS_ENABLED == 'true'
     runs-on: ubuntu-latest
     needs: build
     steps:
