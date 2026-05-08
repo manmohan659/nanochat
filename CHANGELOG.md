@@ -1,3 +1,10 @@
+## [1.2.2](https://github.com/manmohan659/nanochat/compare/v1.2.1...v1.2.2) (2026-05-08)
+
+
+### Bug Fixes
+
+* **inference:** extend dev uat modal timeout ([e765227](https://github.com/manmohan659/nanochat/commit/e7652271cc6b271a9498013e4547f1ea64d5af62))
+
 ## [1.2.1](https://github.com/manmohan659/nanochat/compare/v1.2.0...v1.2.1) (2026-05-08)
 
 
