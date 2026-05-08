@@ -23,6 +23,7 @@ env:
 jobs:
   release:
     name: Blue/Green release ${{ github.ref_name }}
+    if: vars.EKS_DEPLOYMENTS_ENABLED == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

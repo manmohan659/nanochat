@@ -22,7 +22,7 @@ env:
 jobs:
   deploy:
     name: Deploy merged image set to dev
-    if: github.event.workflow_run.conclusion == 'success'
+    if: github.event.workflow_run.conclusion == 'success' && vars.EKS_DEPLOYMENTS_ENABLED == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

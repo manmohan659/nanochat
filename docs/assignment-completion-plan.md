@@ -33,6 +33,19 @@ Production uses separate EKS and Multi-AZ RDS.
 
 ## Git-Driven Automation
 
+Repository prerequisites:
+
+- Set `AWS_ROLE_ARN` to the EKS deploy role used for ECR pushes, kubeconfig, and
+  Helm deploys.
+- Set `AWS_TERRAFORM_ROLE_ARN` to a Terraform-capable role with S3 state,
+  DynamoDB lock, and AWS infrastructure permissions.
+- Set `EKS_DEPLOYMENTS_ENABLED=true` only after runtime secrets are configured:
+  `INTERNAL_API_KEY`, `SESSION_SECRET`, JWT keys, OAuth client credentials, and
+  `HF_TOKEN` if inference needs it.
+- Set `TERRAFORM_APPLY_ENABLED=true` only after `AWS_TERRAFORM_ROLE_ARN` can
+  read `samosachaat-terraform-state-906352610196` and lock
+  `samosachaat-terraform-locks`.
+
 - `.github/workflows/ci.yml`: PR validation, Conventional Commit linting,
   service tests, Docker build checks, Terraform validation, and Helm rendering.
 - `.github/workflows/terraform-apply.yml`: applies Terraform from merged
