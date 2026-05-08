@@ -59,6 +59,20 @@ class FakeAsyncClient:
         return FakeUpstreamResponse()
 
 
+class FailingAsyncClient:
+    def __init__(self, *args, **kwargs):
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return None
+
+    def stream(self, method, url, *, headers, json):
+        raise TimeoutError("upstream timed out")
+
+
 def test_generate_proxies_to_upstream_when_local_model_missing(monkeypatch):
     monkeypatch.setattr(main.httpx, "AsyncClient", FakeAsyncClient)
     settings = Settings(
@@ -86,3 +100,27 @@ def test_generate_proxies_to_upstream_when_local_model_missing(monkeypatch):
         "max_tokens": 4,
         "force_web_search": True,
     }
+
+
+def test_generate_uses_demo_fallback_when_upstream_fails(monkeypatch):
+    monkeypatch.setattr(main.httpx, "AsyncClient", FailingAsyncClient)
+    settings = Settings(
+        internal_api_key="test-key",
+        startup_load_enabled=False,
+        upstream_generate_url="https://example.test/generate",
+        demo_fallback_enabled=True,
+    )
+    app = main.create_app(settings=settings, runtime=NoModelRuntime())
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/generate",
+            headers={"X-Internal-API-Key": "test-key"},
+            json={"messages": [{"role": "user", "content": "hello"}]},
+        )
+
+    assert response.status_code == 200
+    assert '"gpu":"fallback"' in response.text
+    assert '"token":"demo "' in response.text
+    assert '"token":"fallback "' in response.text
+    assert 'data: {"done":true}' in response.text

@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     hf_token: str | None = None
     hf_repo_owner: str = "manmohan659"
     upstream_generate_url: str | None = None
+    upstream_read_timeout_seconds: float = 30.0
+    demo_fallback_enabled: bool = False
     internal_api_key: str | None = None
     num_workers: int = 1
     device_type: str = ""
