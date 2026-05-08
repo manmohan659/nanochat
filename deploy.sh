@@ -222,7 +222,7 @@ eks_deploy() {
     # Deploy observability stack
     if [ -n "${SLACK_WEBHOOK_URL:-}" ] && [ "${GRAFANA_OAUTH_READY}" = "true" ]; then
         log "Deploying observability stack..."
-        helm dependency build "${SCRIPT_DIR}/helm/observability" 2>/dev/null || true
+        "${SCRIPT_DIR}/scripts/build-observability-dependencies.sh"
         helm upgrade --install observability "${SCRIPT_DIR}/helm/observability" \
             --namespace "${APP_NAMESPACE}" --create-namespace \
             --wait --timeout 10m

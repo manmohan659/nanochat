@@ -234,7 +234,7 @@ jobs:
           version: 'v3.16.2'
 
       - name: Build observability dependencies
-        run: helm dependency build helm/observability
+        run: ./scripts/build-observability-dependencies.sh
 
       - name: Lint charts
         run: |

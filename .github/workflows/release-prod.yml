@@ -156,7 +156,7 @@ jobs:
 
       - name: Deploy observability stack
         run: |
-          helm dependency build helm/observability
+          ./scripts/build-observability-dependencies.sh
           helm upgrade --install observability helm/observability \
             --namespace "$PROD_NAMESPACE" \
             --create-namespace \
