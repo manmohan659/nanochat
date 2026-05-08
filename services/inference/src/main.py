@@ -163,14 +163,37 @@ async def generate_stream(worker, request: GenerateRequest, settings: Settings) 
     yield format_sse({"done": True})
 
 
+async def demo_fallback_generate(request: GenerateRequest, reason: str) -> AsyncGenerator[str, None]:
+    user_message = next(
+        (message.content.strip() for message in reversed(request.messages) if message.role == "user"),
+        "your message",
+    )
+    if len(user_message) > 120:
+        user_message = f"{user_message[:117]}..."
+
+    text = (
+        "The primary model is unavailable right now, so this demo fallback is responding. "
+        f"I received: {user_message}"
+    )
+    logger.warning("using_demo_fallback_generate", reason=reason)
+    for token in text.split(" "):
+        yield format_sse({"token": f"{token} ", "gpu": "fallback"})
+        await asyncio.sleep(0.02)
+    yield format_sse({"done": True})
+
+
 async def proxy_upstream_generate(request: GenerateRequest, settings: Settings) -> AsyncGenerator[str, None]:
     if not settings.upstream_generate_url:
+        if settings.demo_fallback_enabled:
+            async for chunk in demo_fallback_generate(request, "upstream_not_configured"):
+                yield chunk
+            return
         yield format_sse({"error": "inference_model_unavailable"})
         yield format_sse({"done": True})
         return
 
     payload = request.model_dump(exclude_none=True)
-    timeout = httpx.Timeout(120.0, connect=10.0)
+    timeout = httpx.Timeout(settings.upstream_read_timeout_seconds, connect=10.0)
 
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
@@ -196,6 +219,10 @@ async def proxy_upstream_generate(request: GenerateRequest, settings: Settings) 
                         yield chunk
     except Exception as exc:  # pragma: no cover - network safety net
         logger.error("upstream_generate_error", error=str(exc))
+        if settings.demo_fallback_enabled:
+            async for chunk in demo_fallback_generate(request, "upstream_generate_failed"):
+                yield chunk
+            return
         yield format_sse({"error": "upstream_generate_failed"})
         yield format_sse({"done": True})
 

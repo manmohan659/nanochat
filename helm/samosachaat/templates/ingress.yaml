@@ -3,9 +3,17 @@
 {{- $frontendSvc := include "samosachaat.svcNameForSlot" (dict "svc" "frontend" "slot" $targetSlot) -}}
 {{- $authSvc := include "samosachaat.svcNameForSlot" (dict "svc" "auth" "slot" $targetSlot) -}}
 {{- $chatApiSvc := include "samosachaat.svcNameForSlot" (dict "svc" "chat-api" "slot" $targetSlot) -}}
-{{- $grafanaHost := default .Values.ingress.grafanaHost .Values.ingress.grafana.host -}}
-{{- $grafanaServiceName := default .Values.ingress.grafanaServiceName .Values.ingress.grafana.serviceName -}}
-{{- $grafanaServicePort := default .Values.ingress.grafanaServicePort .Values.ingress.grafana.servicePort -}}
+{{- $ingressHost := default "samosachaat.art" .Values.ingress.host -}}
+{{- $grafana := default (dict) .Values.ingress.grafana -}}
+{{- $grafanaHost := default (default "grafana.samosachaat.art" .Values.ingress.grafanaHost) $grafana.host -}}
+{{- $grafanaServiceName := default (default "grafana" .Values.ingress.grafanaServiceName) $grafana.serviceName -}}
+{{- $grafanaServicePort := default (default 3000 .Values.ingress.grafanaServicePort) $grafana.servicePort -}}
+{{- $grafanaEnabled := false -}}
+{{- if hasKey $grafana "enabled" -}}
+{{- $grafanaEnabled = $grafana.enabled -}}
+{{- else if $grafanaHost -}}
+{{- $grafanaEnabled = true -}}
+{{- end -}}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -26,7 +34,7 @@ metadata:
     {{- end }}
 spec:
   rules:
-    - host: {{ .Values.ingress.host | quote }}
+    - host: {{ $ingressHost | quote }}
       http:
         paths:
           - path: /auth
@@ -50,7 +58,7 @@ spec:
                 name: {{ $frontendSvc }}
                 port:
                   number: {{ .Values.frontend.port }}
-    {{- if .Values.ingress.grafana.enabled }}
+    {{- if and $grafanaEnabled $grafanaHost }}
     - host: {{ $grafanaHost | quote }}
       http:
         paths:
