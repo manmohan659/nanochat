@@ -3,8 +3,10 @@
 {{- $frontendSvc := include "samosachaat.svcNameForSlot" (dict "svc" "frontend" "slot" $targetSlot) -}}
 {{- $authSvc := include "samosachaat.svcNameForSlot" (dict "svc" "auth" "slot" $targetSlot) -}}
 {{- $chatApiSvc := include "samosachaat.svcNameForSlot" (dict "svc" "chat-api" "slot" $targetSlot) -}}
+{{- $ingress := .Values.ingress | default dict -}}
 {{- $ingressHost := default "samosachaat.art" .Values.ingress.host -}}
-{{- $grafana := default (dict) .Values.ingress.grafana -}}
+{{- $grafana := get $ingress "grafana" | default dict -}}
+{{- $lokiPush := get $ingress "lokiPush" | default dict -}}
 {{- $grafanaHost := default (default "grafana.samosachaat.art" .Values.ingress.grafanaHost) $grafana.host -}}
 {{- $grafanaServiceName := default (default "grafana" .Values.ingress.grafanaServiceName) $grafana.serviceName -}}
 {{- $grafanaServicePort := default (default 3000 .Values.ingress.grafanaServicePort) $grafana.servicePort -}}
@@ -14,6 +16,15 @@
 {{- else if $grafanaHost -}}
 {{- $grafanaEnabled = true -}}
 {{- end -}}
+{{- $lokiPushEnabled := false -}}
+{{- if hasKey $lokiPush "enabled" -}}
+{{- $lokiPushEnabled = $lokiPush.enabled -}}
+{{- end -}}
+{{- $lokiPushHost := get $lokiPush "host" | default $grafanaHost -}}
+{{- $lokiPushPath := get $lokiPush "path" | default "/loki/api/v1/push" -}}
+{{- $lokiPushServiceName := get $lokiPush "serviceName" | default "observability-loki" -}}
+{{- $lokiPushServicePort := get $lokiPush "servicePort" | default 3100 -}}
+{{- $lokiPushSourceCidrs := get $lokiPush "sourceCidrs" | default list -}}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -31,6 +42,9 @@ metadata:
     alb.ingress.kubernetes.io/target-group-attributes: deregistration_delay.timeout_seconds=30
     {{- with .Values.ingress.acmCertArn }}
     alb.ingress.kubernetes.io/certificate-arn: {{ . | quote }}
+    {{- end }}
+    {{- if and $lokiPushEnabled $lokiPushSourceCidrs }}
+    alb.ingress.kubernetes.io/conditions.{{ $lokiPushServiceName }}: {{ list (dict "field" "source-ip" "sourceIpConfig" (dict "values" $lokiPushSourceCidrs)) | toJson | quote }}
     {{- end }}
 spec:
   rules:
@@ -62,6 +76,15 @@ spec:
     - host: {{ $grafanaHost | quote }}
       http:
         paths:
+          {{- if and $lokiPushEnabled (eq $lokiPushHost $grafanaHost) }}
+          - path: {{ $lokiPushPath }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $lokiPushServiceName }}
+                port:
+                  number: {{ $lokiPushServicePort }}
+          {{- end }}
           - path: /
             pathType: Prefix
             backend:
@@ -69,5 +92,17 @@ spec:
                 name: {{ $grafanaServiceName }}
                 port:
                   number: {{ $grafanaServicePort }}
+    {{- end }}
+    {{- if and $lokiPushEnabled (or (not $grafanaEnabled) (ne $lokiPushHost $grafanaHost)) }}
+    - host: {{ $lokiPushHost | quote }}
+      http:
+        paths:
+          - path: {{ $lokiPushPath }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $lokiPushServiceName }}
+                port:
+                  number: {{ $lokiPushServicePort }}
     {{- end }}
 {{- end }}

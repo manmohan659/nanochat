@@ -123,6 +123,15 @@ ingress:
     host: grafana.samosachaat.art
     serviceName: grafana
     servicePort: 3000
+  ## Optional Loki push endpoint for non-prod Promtail agents. This routes only
+  ## /loki/api/v1/push; Grafana UI auth remains OAuth-only.
+  lokiPush:
+    enabled: false
+    host: ""
+    path: /loki/api/v1/push
+    serviceName: observability-loki
+    servicePort: 3100
+    sourceCidrs: []
   ## Deprecated flat Grafana keys retained for older release values.
   grafanaHost: grafana.samosachaat.art
   acmCertArn: ""
@@ -137,8 +146,9 @@ pdb:
   minAvailable: 1
 
 ## ---------------- Prometheus Operator integration ----------------
+## Enable only in clusters where monitoring.coreos.com ServiceMonitor CRDs exist.
 serviceMonitor:
-  enabled: true
+  enabled: false
 
 ## ---------------- DB migration Helm hook ----------------
 dbMigrate:

@@ -1,0 +1,33 @@
+## Production overlay for repeat upgrades of the full observability stack.
+##
+## Helm release values in prod predate a few chart defaults below. Keep this
+## overlay with `--reuse-values` so upgrades apply the observability changes
+## without resetting immutable Loki StatefulSet fields.
+
+kube-prometheus-stack:
+  enabled: true
+  grafana:
+    grafana.ini:
+      "auth.basic":
+        enabled: false
+
+loki-stack:
+  enabled: true
+  loki:
+    service:
+      annotations:
+        alb.ingress.kubernetes.io/healthcheck-path: /ready
+        alb.ingress.kubernetes.io/success-codes: "200"
+  promtail:
+    config:
+      snippets:
+        extraRelabelConfigs:
+          - source_labels:
+              - __meta_kubernetes_pod_label_app_kubernetes_io_component
+              - __meta_kubernetes_pod_label_component
+            regex: ^;*([^;]+)(;.*)?$
+            action: replace
+            target_label: service
+          - source_labels:
+              - __meta_kubernetes_pod_label_app_kubernetes_io_part_of
+            target_label: part_of
