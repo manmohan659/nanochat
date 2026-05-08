@@ -135,8 +135,8 @@ jobs:
           GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
           GITHUB_CLIENT_ID: ${{ secrets.OAUTH_GITHUB_CLIENT_ID || secrets.GITHUB_CLIENT_ID }}
           GITHUB_CLIENT_SECRET: ${{ secrets.OAUTH_GITHUB_CLIENT_SECRET || secrets.GITHUB_CLIENT_SECRET }}
-          GITHUB_GRAFANA_CLIENT_ID: ${{ secrets.GITHUB_GRAFANA_CLIENT_ID }}
-          GITHUB_GRAFANA_CLIENT_SECRET: ${{ secrets.GITHUB_GRAFANA_CLIENT_SECRET }}
+          GITHUB_GRAFANA_CLIENT_ID: ${{ secrets.OAUTH_GRAFANA_CLIENT_ID }}
+          GITHUB_GRAFANA_CLIENT_SECRET: ${{ secrets.OAUTH_GRAFANA_CLIENT_SECRET }}
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: ./scripts/sync-runtime-env.sh prod
