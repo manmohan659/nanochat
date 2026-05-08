@@ -1,0 +1,156 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {"type": "grafana", "uid": "-- Grafana --"},
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {"type": "loki", "uid": "loki"},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 0},
+      "id": 1,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": true,
+        "showCommonLabels": false,
+        "showLabels": true,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "datasource": {"type": "loki", "uid": "loki"},
+          "expr": "{namespace=~\"$namespace\", service=~\"$service\"} | json",
+          "refId": "A"
+        }
+      ],
+      "title": "Centralized Service Logs",
+      "type": "logs"
+    },
+    {
+      "datasource": {"type": "loki", "uid": "loki"},
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+      "id": 2,
+      "options": {
+        "legend": {"displayMode": "table", "placement": "bottom"},
+        "tooltip": {"mode": "single", "sort": "none"}
+      },
+      "targets": [
+        {
+          "datasource": {"type": "loki", "uid": "loki"},
+          "expr": "sum by (namespace, service) (count_over_time({namespace=~\"$namespace\", service=~\"$service\"} | json | level=\"error\" [5m]))",
+          "refId": "A"
+        }
+      ],
+      "title": "Errors by Namespace and Service",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "loki", "uid": "loki"},
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+      "id": 3,
+      "options": {
+        "legend": {"displayMode": "table", "placement": "bottom"},
+        "tooltip": {"mode": "single", "sort": "none"}
+      },
+      "targets": [
+        {
+          "datasource": {"type": "loki", "uid": "loki"},
+          "expr": "sum by (namespace, service) (count_over_time({namespace=~\"$namespace\", service=~\"$service\"} [5m]))",
+          "refId": "A"
+        }
+      ],
+      "title": "Log Volume by Service",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {"type": "loki", "uid": "loki"},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 16},
+      "id": 4,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": true,
+        "showCommonLabels": false,
+        "showLabels": true,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "datasource": {"type": "loki", "uid": "loki"},
+          "expr": "{namespace=~\"$namespace\", service=~\"frontend|auth|chat-api|inference\"} | json | trace_id=\"$trace_id\"",
+          "refId": "A"
+        }
+      ],
+      "title": "Trace Drilldown",
+      "type": "logs"
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 39,
+  "tags": ["samosachaat", "logs", "loki"],
+  "templating": {
+    "list": [
+      {
+        "current": {"selected": true, "text": "samosachaat-prod", "value": "samosachaat-prod"},
+        "datasource": {"type": "loki", "uid": "loki"},
+        "definition": "label_values(namespace)",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Namespace",
+        "name": "namespace",
+        "options": [],
+        "query": "label_values(namespace)",
+        "refresh": 1,
+        "type": "query"
+      },
+      {
+        "current": {"selected": true, "text": "All", "value": "frontend|auth|chat-api|inference"},
+        "hide": 0,
+        "includeAll": false,
+        "label": "Service",
+        "name": "service",
+        "options": [
+          {"selected": true, "text": "All", "value": "frontend|auth|chat-api|inference"},
+          {"selected": false, "text": "frontend", "value": "frontend"},
+          {"selected": false, "text": "auth", "value": "auth"},
+          {"selected": false, "text": "chat-api", "value": "chat-api"},
+          {"selected": false, "text": "inference", "value": "inference"}
+        ],
+        "query": "frontend|auth|chat-api|inference",
+        "type": "custom"
+      },
+      {
+        "current": {"selected": false, "text": "", "value": ""},
+        "hide": 0,
+        "label": "Trace ID",
+        "name": "trace_id",
+        "query": "",
+        "type": "textbox"
+      }
+    ]
+  },
+  "time": {"from": "now-1h", "to": "now"},
+  "timezone": "browser",
+  "title": "samosaChaat - Logs",
+  "uid": "samosachaat-logs",
+  "version": 1,
+  "weekStart": ""
+}

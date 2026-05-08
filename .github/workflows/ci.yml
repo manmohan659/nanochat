@@ -25,6 +25,7 @@ jobs:
       inference: ${{ steps.filter.outputs.inference }}
       db: ${{ steps.filter.outputs.db }}
       terraform: ${{ steps.filter.outputs.terraform }}
+      helm: ${{ steps.filter.outputs.helm }}
     steps:
       - uses: actions/checkout@v4
 
@@ -46,6 +47,8 @@ jobs:
               - 'db/**'
             terraform:
               - 'terraform/**'
+            helm:
+              - 'helm/**'
 
   commitlint:
     name: PR commits — conventional commit lint
@@ -216,6 +219,34 @@ jobs:
           for dir in bootstrap environments/dev environments/uat environments/prod; do
             terraform -chdir="$dir" validate
           done
+
+  helm-validate:
+    name: Helm — lint/template
+    needs: changes
+    if: needs.changes.outputs.helm == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'v3.16.2'
+
+      - name: Build observability dependencies
+        run: helm dependency build helm/observability
+
+      - name: Lint charts
+        run: |
+          helm lint helm/samosachaat
+          helm lint helm/observability
+
+      - name: Template app chart for all environments
+        run: |
+          helm template samosachaat-dev helm/samosachaat --api-versions monitoring.coreos.com/v1 -f helm/samosachaat/values-dev.yaml >/tmp/dev.yaml
+          helm template samosachaat-qa helm/samosachaat --api-versions monitoring.coreos.com/v1 -f helm/samosachaat/values-qa.yaml >/tmp/qa.yaml
+          helm template samosachaat-uat helm/samosachaat --api-versions monitoring.coreos.com/v1 -f helm/samosachaat/values-uat.yaml >/tmp/uat.yaml
+          helm template samosachaat-prod helm/samosachaat --api-versions monitoring.coreos.com/v1 -f helm/samosachaat/values-prod.yaml >/tmp/prod.yaml
 
   docker-build:
     name: Docker build — ${{ matrix.service }}

@@ -1,0 +1,48 @@
+name: Patch EKS Worker Nodes
+
+on:
+  schedule:
+    - cron: '0 10 * * 1'
+  push:
+    tags:
+      - 'patch-nodes-*'
+
+concurrency:
+  group: patch-nodes
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-west-2' }}
+
+jobs:
+  rotate-nodes:
+    name: Rotate ${{ matrix.environment }} managed node group
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        environment: [uat, prod]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.9.8'
+          terraform_wrapper: false
+
+      - name: Rotate nodes to latest EKS optimized AMI
+        env:
+          GITHUB_ACTIONS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
+          AUTO_APPROVE: "true"
+        run: ./scripts/rotate-nodes.sh "${{ matrix.environment }}" --yes

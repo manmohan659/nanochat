@@ -90,11 +90,12 @@ module "rds" {
   private_subnet_ids         = module.vpc.private_subnet_ids
   eks_node_security_group_id = module.eks.node_security_group_id
 
-  db_name             = "samosachaat_prod"
-  instance_class      = "db.t3.micro"
-  multi_az            = false
-  skip_final_snapshot = false
-  deletion_protection = true
+  db_name                 = "samosachaat_prod"
+  instance_class          = "db.t3.micro"
+  multi_az                = true
+  backup_retention_period = 7
+  skip_final_snapshot     = false
+  deletion_protection     = true
 
   tags = merge(local.tags, {
     Isolation = "physical-prod"

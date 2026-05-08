@@ -7,7 +7,6 @@ source "${SCRIPT_DIR}/aws-cost-lib.sh"
 
 MODE="${1:-sleep}"
 AUTO_APPROVE="false"
-INCLUDE_EC2="false"
 SKIP_HELM="false"
 SKIP_NODES="false"
 SKIP_RDS="false"
@@ -16,16 +15,15 @@ WAIT_FOR_RDS="true"
 usage() {
   cat <<'USAGE'
 Usage:
-  ./scripts/aws-cost-down.sh sleep [--yes] [--include-ec2] [--skip-helm] [--skip-nodes] [--skip-rds]
+  ./scripts/aws-cost-down.sh sleep [--yes] [--skip-helm] [--skip-nodes] [--skip-rds]
 
 Sleep mode is reversible and keeps durable state:
   - uninstall samosaChaat/observability Helm releases so ALBs are deleted
   - scale EKS managed node groups to desired/min 0
   - stop samosaChaat RDS instances
-  - optionally stop the EC2 fallback with --include-ec2
 
 It does not delete Terraform state, ECR images, Route53, ACM, snapshots, RDS storage,
-EKS control planes, VPCs, or the EC2 fallback instance.
+EKS control planes, or VPCs.
 USAGE
 }
 
@@ -43,7 +41,6 @@ shift || true
 while [[ "$#" -gt 0 ]]; do
   case "$1" in
     --yes|-y) AUTO_APPROVE="true" ;;
-    --include-ec2) INCLUDE_EC2="true" ;;
     --skip-helm) SKIP_HELM="true" ;;
     --skip-nodes) SKIP_NODES="true" ;;
     --skip-rds) SKIP_RDS="true" ;;
@@ -174,23 +171,6 @@ if [[ "$SKIP_RDS" != "true" ]]; then
       wait_for_rds_status "$db" "stopped" || true
     done < <(rds_instances)
   fi
-fi
-
-if [[ "$INCLUDE_EC2" == "true" ]]; then
-  state="$(fallback_instance_state)"
-  if [[ "$state" == "running" ]]; then
-    log "Stopping EC2 fallback ${EC2_FALLBACK_INSTANCE_ID}."
-    aws ec2 stop-instances \
-      --region "$AWS_REGION" \
-      --instance-ids "$EC2_FALLBACK_INSTANCE_ID" >/dev/null
-    aws ec2 wait instance-stopped \
-      --region "$AWS_REGION" \
-      --instance-ids "$EC2_FALLBACK_INSTANCE_ID"
-  else
-    log "EC2 fallback ${EC2_FALLBACK_INSTANCE_ID} is ${state:-unknown}; no stop needed."
-  fi
-else
-  warn "EC2 fallback was left running. Re-run with --include-ec2 to stop it too."
 fi
 
 log "Sleep mode complete. Run ./scripts/aws-cost-up.sh --yes to start RDS and nodes again."

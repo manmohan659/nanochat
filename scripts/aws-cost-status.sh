@@ -17,10 +17,6 @@ log "RDS instances"
 rds_instances | awk 'BEGIN {printf "%-30s %-16s\n", "DBInstance", "Status"} {printf "%-30s %-16s\n", $1, $2}'
 
 echo ""
-log "EC2 fallback"
-printf '%-24s %s\n' "$EC2_FALLBACK_INSTANCE_ID" "$(fallback_instance_state)"
-
-echo ""
 log "NAT gateways"
 aws ec2 describe-nat-gateways \
   --region "$AWS_REGION" \

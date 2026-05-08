@@ -13,23 +13,26 @@ This repository now also carries the samosaChaat platform scaffold alongside the
 original nanochat training code. The new top-level directories are organized for
 service-oriented development:
 
-- `services/` contains the frontend, auth, chat API, and inference services
+- `services/` contains the Next.js frontend plus the `auth`, `chat-api`, and
+  `inference` backend microservices
 - `contracts/` contains the shared OpenAPI and JSON schema contracts
-- `db/migrations/` contains PostgreSQL schema bootstrap scripts
-- `helm/` contains application and observability chart scaffolding
-- `terraform/` contains shared modules plus `dev`, `uat`, and `prod` environment scaffolding
+- `db/migrations/` contains Alembic PostgreSQL migrations
+- `helm/` contains the EKS application chart and the self-hosted
+  Prometheus/Grafana/Loki observability chart
+- `terraform/` contains reusable AWS modules plus shared non-prod, UAT
+  metadata, and production environment stacks
 
-### Local platform quick start
+### Platform quick start
 
 1. Copy `.env.example` to `.env` and replace the placeholder secrets.
 2. Start the local stack with `bash scripts/local-dev.sh`.
 3. Seed the local database with `bash scripts/seed-db.sh`.
 4. Open the placeholder frontend at [http://localhost:3000](http://localhost:3000).
 
-The initial scaffold keeps the service topology stable for local development.
-`services/auth`, `services/chat-api`, and `services/frontend` are placeholders
-until their dedicated implementations land; the inference service is extracted on
-the follow-up branch.
+For the AWS grading platform, use the GitHub Actions workflows and Terraform
+stacks described in [docs/assignment-completion-plan.md](docs/assignment-completion-plan.md).
+The target architecture is EKS + AWS RDS PostgreSQL only, with DNS/TLS through
+Terraform-managed Route53/ACM and no EC2 deployment fallback.
 
 ## Time-to-GPT-2 Leaderboard
 

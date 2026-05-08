@@ -20,7 +20,6 @@ What it does:
   ALBs are deleted.
 - Scales every `samosachaat-*` EKS managed node group to `min=0, desired=0`.
 - Stops `samosachaat-*` RDS instances.
-- Leaves the EC2 fallback running unless `--include-ec2` is passed.
 - Saves previous node group sizes under `.aws-cost/nodegroups/`.
 
 What it keeps:
@@ -37,17 +36,8 @@ Remaining cost in sleep mode:
 - EKS control-plane hourly cost.
 - NAT Gateway hourly cost while NAT Gateways exist.
 - RDS storage and backup storage.
-- Public IPv4/EIP charges, including the EC2 fallback EIP.
+- Public IPv4 charges for active managed endpoints.
 - Route53 hosted zone cost.
-
-To also stop the EC2 fallback:
-
-```bash
-./scripts/aws-cost-down.sh sleep --include-ec2 --yes
-```
-
-Stopping the EC2 fallback takes `https://samosachaat.art` offline while GoDaddy
-still points to `16.148.217.62`, but it does not delete the instance or EIP.
 
 ## Start Back Up
 
@@ -55,12 +45,6 @@ Start RDS and restore node group sizes:
 
 ```bash
 ./scripts/aws-cost-up.sh --yes
-```
-
-If the EC2 fallback was stopped:
-
-```bash
-./scripts/aws-cost-up.sh --include-ec2 --yes
 ```
 
 If Helm releases were removed and namespace secrets still exist, restore the
@@ -90,7 +74,6 @@ Inspect cost-bearing resources:
 This reports:
 
 - RDS instance status.
-- EC2 fallback state.
 - NAT Gateways.
 - Elastic IPs/public IPv4s.
 - Kubernetes-managed ALBs.
@@ -123,7 +106,6 @@ hibernate as a deliberate manual maintenance operation.
 
 - RDS stopped instances can be automatically restarted by AWS after seven days;
   rerun `aws-cost-down.sh` if that happens before the next demo session.
-- Public IPv4 addresses are billed whether attached or idle, so retaining the
-  fallback EIP still has a small hourly cost.
+- Public IPv4 addresses are billed whether attached or idle.
 - Deleting ALBs requires the AWS Load Balancer Controller to be running, so the
   script removes Helm releases before scaling nodes to zero.

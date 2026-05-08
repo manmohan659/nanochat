@@ -1,297 +1,133 @@
 # samosaChaat Assignment Completion Plan
 
-This is the grading path for moving the current EC2 demo into the required EKS + RDS + Terraform + Git-driven platform.
+This is the grading path for the final EKS + RDS + Terraform + Git-driven
+platform. The goal is not just to satisfy the literal checklist; it is to make
+every claim reproducible, diagnosable, and defensible without AWS Console
+deploy clicks.
 
-## Target Architecture
+## Final Architecture
 
-- Frontend: Next.js service behind AWS ALB Ingress at `https://samosachaat.art`.
-- Backend microservices on EKS:
-  - `auth` FastAPI OAuth/JWT service.
-  - `chat-api` FastAPI conversation/SSE orchestration service.
-  - `inference` FastAPI model service or proxy.
-- Database: AWS RDS PostgreSQL only for EKS environments. No in-cluster PostgreSQL and no EC2 PostgreSQL for the final demo. Use two physical RDS instances: `samosachaat-nonprod-pg` for dev/QA/UAT logical databases and `samosachaat-prod-pg` for production.
-- Observability: self-hosted `kube-prometheus-stack` + Grafana + Alertmanager + Loki/Promtail on EKS.
-- CI/CD: GitHub Actions with AWS OIDC. No AWS Console deploy clicks.
+- Frontend: Next.js service on EKS behind AWS ALB Ingress with HTTPS.
+- Backend microservices:
+  - `auth`: OAuth/JWT/user service.
+  - `chat-api`: conversation API, RDS persistence, SSE orchestration.
+  - `inference`: EKS-hosted model service.
+- Database: AWS RDS PostgreSQL only. No in-cluster PostgreSQL.
+- Infrastructure: Terraform owns VPC, EKS, managed nodes, RDS, ECR, IAM, EFS,
+  ACM, Route53, remote state, and access entries.
+- Observability: self-hosted Prometheus, Grafana, Alertmanager, Loki, and
+  Promtail on EKS. Grafana is OAuth-only.
 
-## One-Time Prerequisites
+## Environments
 
-1. Confirm AWS account and region:
+| Runtime | Cluster | Namespace | Database | DNS |
+| --- | --- | --- | --- | --- |
+| dev | `samosachaat-dev-eks` | `samosachaat-dev` | `samosachaat_dev` | `dev.samosachaat.art` |
+| QA nightly | `samosachaat-dev-eks` | `samosachaat-qa` | `samosachaat_qa` | `qa.samosachaat.art` |
+| UAT | `samosachaat-dev-eks` | `samosachaat-uat` | `samosachaat_uat` | `uat.samosachaat.art` |
+| prod | `samosachaat-prod-eks` | `samosachaat-prod` | `samosachaat_prod` | `samosachaat.art` |
 
-```bash
-AWS_PROFILE=accmanmohanusfca aws sts get-caller-identity
-export AWS_REGION=us-west-2
-```
+Dev, QA, and UAT share non-prod EKS/RDS infrastructure but are isolated by
+namespace, DNS host, Kubernetes secret, logical database, and database role.
+Production uses separate EKS and Multi-AZ RDS.
 
-2. Bootstrap Terraform remote state with Terraform:
+## Git-Driven Automation
 
-```bash
-AWS_PROFILE=accmanmohanusfca terraform -chdir=terraform/bootstrap init
-AWS_PROFILE=accmanmohanusfca terraform -chdir=terraform/bootstrap apply
-```
+- `.github/workflows/ci.yml`: PR validation, Conventional Commit linting,
+  service tests, Docker build checks, Terraform validation, and Helm rendering.
+- `.github/workflows/terraform-apply.yml`: applies Terraform from merged
+  `terraform/**` changes. This is the Day 1 and Day 2 IaC update path.
+- `.github/workflows/build-dev.yml`: builds immutable `dev-<sha>` images.
+- `.github/workflows/deploy-dev.yml`: deploys the merged `dev-<sha>` image set
+  to EKS dev, bootstraps the RDS logical DB, syncs secrets, reconciles DNS via
+  Terraform, and runs internal plus external smoke tests.
+- `.github/workflows/nightly.yml`: scheduled QA image build and QA deployment.
+- `.github/workflows/promote-uat.yml`: automatically promotes merged dev images
+  only after dev deployment and smoke tests pass, or promotes `RC*` QA images
+  to UAT.
+- `.github/workflows/release.yml`: semantic-release creates stable `v*` tags
+  from Conventional Commits only after the matching UAT promotion succeeds.
+- `.github/workflows/release-prod.yml`: stable `v*` tags promote the exact
+  `uat-merge-<sha>` image set for the tagged commit to production with
+  blue/green.
+- `.github/workflows/patch-nodes.yml`: scheduled or `patch-nodes-*` tag-driven
+  managed node rotation to the latest EKS optimized AMI.
 
-3. Delegate DNS to Route53.
+There are no production `workflow_dispatch` deploys and no EC2 deployment
+workflow. Git tags, merges, and scheduled jobs are the deployment controls.
 
-Run the first Terraform apply for the environment that will own DNS, then copy
-`route53_name_servers` into GoDaddy name servers for `samosachaat.art`. The
-current Route53 hosted zone name servers are:
+## DNS And TLS
 
-- `ns-1077.awsdns-06.org`
-- `ns-968.awsdns-57.net`
-- `ns-425.awsdns-53.com`
-- `ns-1917.awsdns-47.co.uk`
+ACM wildcard certificates and Route53 validation records are Terraform-managed.
+The ALBs are created by the AWS Load Balancer Controller after Ingress exists,
+so `scripts/reconcile-route53-alias.sh` resolves the ALB DNS name and feeds it
+back into Terraform. Route53 aliases remain Terraform-owned.
 
-```bash
-AWS_PROFILE=accmanmohanusfca terraform -chdir=terraform/environments/prod init
-AWS_PROFILE=accmanmohanusfca terraform -chdir=terraform/environments/prod apply
-AWS_PROFILE=accmanmohanusfca terraform -chdir=terraform/environments/prod output route53_name_servers
-```
+Non-prod uses one shared ALB group, `samosachaat-nonprod`, for
+`dev`, `qa`, and `uat` hosts. Production uses `samosachaat-prod` for
+`samosachaat.art` and `grafana.samosachaat.art`.
 
-After GoDaddy delegation propagates, validate ACM:
+## Zero Downtime
 
-```bash
-AWS_PROFILE=accmanmohanusfca terraform -chdir=terraform/environments/prod apply -var=validate_acm_certificate=true
-```
+- Blue/Green is used for production because chat streaming and auth sessions are
+  state-sensitive. The candidate slot gets no public traffic until it passes
+  in-cluster smoke tests.
+- Deployments use `maxUnavailable: 0`, `maxSurge: 1`, readiness probes,
+  preStop delay, and ALB target deregistration delay.
+- QA/UAT/prod use at least two replicas per service and PDBs with
+  `minAvailable: 1`.
+- Pods use topology spread constraints so replicas are distributed across nodes
+  when capacity allows.
+- Public endpoint smoke tests verify DNS, TLS, and ALB routing after promotion.
 
-4. Export runtime secrets before EKS deployment:
+## Day 2: Node Patching
 
-```bash
-export GOOGLE_CLIENT_ID=...
-export GOOGLE_CLIENT_SECRET=...
-export GITHUB_CLIENT_ID=...
-export GITHUB_CLIENT_SECRET=...
-export GITHUB_GRAFANA_CLIENT_ID=...
-export GITHUB_GRAFANA_CLIENT_SECRET=...
-export SLACK_WEBHOOK_URL=...
-export INFERENCE_SERVICE_URL=...
-```
-
-Optional but recommended: set stable JWT key files instead of allowing `deploy.sh` to generate demo keys.
-
-```bash
-./scripts/generate-jwt-keys.sh
-export JWT_PRIVATE_KEY_FILE=.secrets/jwt-private.pem
-export JWT_PUBLIC_KEY_FILE=.secrets/jwt-public.pem
-```
-
-5. Configure GitHub repository secrets and variables:
-
-- `AWS_ROLE_ARN`: GitHub Actions OIDC role created by Terraform.
-- `AWS_REGION`: `us-west-2`.
-- `SEMANTIC_RELEASE_TOKEN` or `INFRA_REPO_PAT`: GitHub PAT used by semantic-release so generated `v*` tags trigger the production deployment workflow.
-- OAuth, Grafana OAuth, Slack, and runtime secrets used by `deploy.sh` and Helm secrets.
-
-## Day 1 Provisioning
-
-Provision each runtime through Terraform and Helm. Dev, QA, and UAT deploy as
-separate namespaces on the shared non-prod EKS/RDS tier; prod deploys to the
-physically isolated prod EKS/RDS tier:
-
-```bash
-./deploy.sh eks dev
-./deploy.sh eks qa
-./deploy.sh eks uat
-./deploy.sh eks prod
-```
-
-For prod, `deploy.sh` automatically reuses the GitHub Actions role created by
-the dev/non-prod environment. If needed, pass it explicitly:
+Terraform reads the recommended AL2023 EKS optimized AMI from SSM. Applying
+Terraform updates the managed node group launch template, and EKS rotates nodes
+while respecting PDBs.
 
 ```bash
-export GITHUB_ACTIONS_ROLE_ARN="$(terraform -chdir=terraform/environments/dev output -raw github_actions_role_arn)"
-./deploy.sh eks uat
-./deploy.sh eks prod
-```
-
-After prod deploy, verify:
-
-```bash
-kubectl get nodes
-kubectl get pods -n samosachaat-prod
-kubectl get ingress -n samosachaat-prod
-curl -Ik https://samosachaat.art
-curl -Ik https://grafana.samosachaat.art
-```
-
-## CI/CD Promotion Flow
-
-The GitHub Actions layout follows the same control pattern used in the SiPeKa repos: PR validation first, exact image tags for promotion, automated release creation from Conventional Commits, and smoke tests before each environment is considered promoted.
-
-1. PR checks:
-   - `.github/workflows/ci.yml` enforces Conventional Commits with commitlint.
-   - Service tests run only for changed paths.
-   - Docker images build locally in CI before a merge is allowed.
-   - Terraform environments validate when IaC files change.
-
-2. Dev build:
-   - Merge to `master` or `main`.
-   - `.github/workflows/build-dev.yml` builds and pushes `dev-<sha>` and `dev-latest`.
-   - `.github/workflows/deploy-ec2.yml` remains for the old EC2 fallback, not the final grading path.
-
-3. Nightly QA:
-   - `.github/workflows/nightly.yml` runs on schedule or manually.
-   - Builds `qa-<sha>` and `qa-latest`.
-   - Deploys to `samosachaat-qa` namespace on the shared non-prod EKS cluster.
-   - Uses lighter replica/resource settings than UAT so dev, QA, and UAT can
-     coexist on the cost-controlled non-prod node group.
-   - Runs `scripts/smoke-test-k8s.sh samosachaat-qa` across frontend, auth, chat-api, and inference.
-
-4. Dev/QA to UAT:
-   - PR merge path: successful `.github/workflows/build-dev.yml` completion promotes the exact `dev-<sha>` image set to UAT as `uat-merge-<sha>`.
-   - RC path: pushing an `RC*` tag promotes the latest smoke-tested `qa-latest` image set as `uat-RC*`.
-   - Manual recovery path: `workflow_dispatch` can promote a specific source tag such as `qa-<sha>` or `dev-<sha>`.
-   - Helm deploys UAT with `--wait`, then `scripts/smoke-test-k8s.sh samosachaat-uat` gates success.
-
-```bash
-git tag RC1
-git push origin RC1
-```
-
-5. Release creation:
-   - `.github/workflows/release.yml` runs semantic-release from Conventional Commits.
-   - semantic-release updates `CHANGELOG.md`, creates the GitHub release, and pushes `v*` release tags.
-   - Use `SEMANTIC_RELEASE_TOKEN` or `INFRA_REPO_PAT`; the default GitHub token will not trigger downstream workflows from a generated tag.
-
-6. UAT to production:
-   - Push a release tag such as `v1.0.1`, or let semantic-release create it.
-   - Prerelease tags such as `v1.0.1-rc.1` are excluded from the production workflow.
-   - `.github/workflows/release-prod.yml` promotes the latest consistent `uat-*` image set to `prod-v1.0.1`.
-   - Prod uses Blue/Green: deploy inactive slot, smoke test all services, then swap only the ALB Ingress target.
-
-```bash
-git tag v1.0.1
-git push origin v1.0.1
-```
-
-## Blue/Green Justification
-
-Blue/Green is the best fit for this project because chat streaming and auth flows are state-sensitive. A canary would deliberately send a slice of live users through a partially proven release, which is useful for very high-traffic systems but harder to defend in a class demo. Blue/Green gives a simple recovery story:
-
-- Green is deployed without public traffic.
-- Green is smoke-tested inside the cluster.
-- The ALB Ingress switches traffic atomically to Green.
-- Blue remains available as rollback standby.
-
-Zero dropped requests are supported by:
-
-- Kubernetes readiness probes.
-- `maxUnavailable: 0` rolling update strategy.
-- PodDisruptionBudgets in QA/UAT/prod.
-- ALB target deregistration delay.
-- At least two replicas in QA/UAT and three replicas in prod.
-
-## Day 2 OS/Security Patching Demo
-
-The EKS managed node group reads the latest EKS-optimized AMI ID from SSM. Re-running Terraform updates the launch template and triggers managed node rotation.
-
-```bash
-export GITHUB_ACTIONS_ROLE_ARN=arn:aws:iam::906352610196:role/samosachaat-dev-github-actions
+./scripts/rotate-nodes.sh uat --yes
 ./scripts/rotate-nodes.sh prod --yes
 ```
 
-Narration points:
+The scheduled GitHub workflow does the same with `.github/workflows/patch-nodes.yml`.
 
-- Terraform detects the latest patched AMI.
-- EKS launches replacement nodes first.
-- Kubernetes cordons and drains old nodes.
-- PDBs keep at least one pod per service available.
-- Readiness probes prevent traffic to unready pods.
+## Day 2: Schema Changes
 
-Watch during the demo:
-
-```bash
-kubectl get nodes -w
-kubectl get pods -n samosachaat-prod -o wide -w
-```
-
-## Day 2 Schema Change Demo
-
-Migration `004_add_favorited.py` adds `conversations.is_favorited`.
+Schema changes are Alembic migrations run as Helm pre-install/pre-upgrade Jobs.
+The demonstration migration, `004_add_favorited.py`, is an expand-only change:
+it adds a nullable-compatible/defaulted column that old pods ignore and new pods
+can use after rollout.
 
 ```bash
+./scripts/demo-schema-change.sh samosachaat-uat
 ./scripts/demo-schema-change.sh samosachaat-prod blue
 ```
 
-Narration points:
+For future risky changes, use expand/contract: add backward-compatible schema,
+deploy code that writes both forms, backfill, then remove old fields in a later
+release.
 
-- The app uses Alembic, not manual SQL in the console.
-- The Helm pre-upgrade hook runs `alembic -c db/alembic.ini upgrade head`.
-- The change is backward-compatible: adding a nullable/defaulted column first means old pods ignore it while new pods can read it.
-- The model exposes `is_favorited` in API payloads after the rollout.
+## Observability And Chaos Defense
 
-## Observability And Logging
+Grafana is exposed at `https://grafana.samosachaat.art` through the production
+ALB and allows GitHub OAuth only. Basic auth and anonymous auth are disabled.
 
-Deploys inside EKS:
+Dashboards:
 
-- Prometheus for metrics.
-- Grafana for dashboards.
-- Alertmanager for Slack alerts.
-- Loki + Promtail for logs.
+- Node Health: CPU, memory, disk, network, pods per node.
+- Application Performance: request rate, latency, errors, uptime.
+- Inference Service: worker and generation metrics.
+- Logs: Loki queries across frontend, auth, chat-api, and inference.
 
-Required dashboard:
+Critical resource alerts route through self-hosted Alertmanager/Grafana contact
+points to Slack. The live chaos response starts in Grafana, drills into Loki by
+`namespace`, `service`, or `trace_id`, then verifies Kubernetes state with
+`kubectl get events`, rollout status, and pod logs.
 
-- Open `https://grafana.samosachaat.art`.
-- Login through GitHub OAuth only.
-- Show the `Node Health` dashboard for CPU, memory, and disk.
-- Show application dashboards for request rate, 5xx, latency, and inference health.
+## Presentation Rule
 
-Required log query examples:
-
-```logql
-{namespace="samosachaat-prod"} | json | level="error"
-{namespace="samosachaat-prod"} | json | service="auth"
-{namespace="samosachaat-prod"} | json | service="chat-api"
-{namespace="samosachaat-prod"} | json | service="inference"
-{namespace="samosachaat-prod"} | json | trace_id="<trace-id>"
-```
-
-## Chaos Defense Script
-
-Use `docs/chaos-runbook.md` in the live defense. The default response pattern is:
-
-1. State the symptom from Grafana.
-2. Narrow the blast radius by namespace/service.
-3. Query Loki for the same time window.
-4. Verify Kubernetes state with `kubectl get pods/events`.
-5. Explain the automatic recovery mechanism or apply the smallest safe fix.
-
-Fast commands:
-
-```bash
-kubectl get pods -n samosachaat-prod
-kubectl get events -n samosachaat-prod --sort-by=.lastTimestamp | tail -30
-kubectl rollout status deploy/chat-api -n samosachaat-prod
-kubectl logs -n samosachaat-prod deploy/chat-api --tail=100
-```
-
-## Final Rubric Checklist
-
-- Terraform: VPC, EKS, RDS, ECR, IAM, ACM, Route53, EFS, and state backend are Terraform-managed.
-- App/networking: 3+ microservices on EKS, RDS PostgreSQL, HTTPS custom domain, ALB Ingress.
-- CI/CD: PR commitlint/tests/Docker build, dev build, nightly QA smoke test, RC/build-success to UAT, semantic-release/`v*` release to prod.
-- Strategy: Blue/Green with inactive-slot smoke test and ingress swap.
-- Day 2 patching: `scripts/rotate-nodes.sh`.
-- Day 2 schema: Alembic Helm hook and `scripts/demo-schema-change.sh`.
-- Observability: Prometheus/Grafana/Alertmanager/Loki inside EKS, Grafana OAuth, Slack alerts.
-- Defense: use Grafana first, Loki second, Kubernetes events third.
-
-## What Is Still Operationally Pending
-
-- Dev/non-prod Terraform is applied in AWS. `samosachaat-nonprod-pg` is live,
-  and dev, QA, and UAT namespaces have passed in-cluster smoke tests.
-- Prod Terraform has the EKS/VPC/IAM/EFS/ACM pieces, but `samosachaat-prod-pg`
-  is blocked until the old physical `samosachaat-uat-pg` is explicitly
-  snapshotted and deleted. The project is intentionally limited to two active
-  RDS instances, and those slots are currently `samosachaat-nonprod-pg` plus the
-  legacy UAT instance.
-- Delegate GoDaddy DNS to the Terraform-created Route53 zone and complete ACM
-  validation. Until this happens, ALB HTTPS listeners reject the pending ACM
-  certificate and the public `samosachaat.art` record remains on the EC2
-  fallback.
-- Configure GitHub repository secrets and environment protections.
-- Create the GitHub OAuth app for Grafana and the app login callback OAuth
-  clients, then export the real Grafana OAuth secrets before installing
-  observability.
-- Export a real `SLACK_WEBHOOK_URL` before installing Alertmanager; placeholder
-  alert routes are intentionally not installed.
-- Run one live end-to-end promotion: PR merge to UAT, RC tag to UAT, and `v*` tag to prod.
-- Record the silent Day 1/Day 2 videos, then narrate over them live during the presentation.
+Use [presentation-defense-checklist.md](presentation-defense-checklist.md) as
+the live narration guide. Long Terraform/node-rotation recordings may be silent
+video only; the decisions, checks, and recovery logic should be narrated live.

@@ -2,8 +2,8 @@
 
 Environment and module scaffolding for the samosaChaat AWS platform.
 
-- `environments/` holds infrastructure stacks for `dev`/non-prod, legacy `uat`
-  decommission planning, and `prod`
+- `environments/` holds infrastructure stacks for shared `dev`/non-prod,
+  UAT metadata, and `prod`
 - `modules/` holds reusable building blocks for shared infrastructure
 
 ## RDS cost model
@@ -18,11 +18,10 @@ The final platform intentionally uses two physical RDS PostgreSQL instances:
 UAT runtime deploys to namespace `samosachaat-uat` on the shared non-prod EKS
 cluster. It does not own a separate physical RDS instance.
 
-The legacy `samosachaat-uat-pg` instance may still exist during migration. It
-must be snapshotted and removed only after explicit approval; until then the
-project cannot create `samosachaat-prod-pg` without violating the two-RDS
-cost-control decision because the two allowed active RDS slots are already
-occupied.
+The UAT Terraform stack no longer declares standalone VPC, EKS, or RDS
+resources. It reads the shared non-prod Terraform state and exposes UAT-specific
+metadata so deployments stay tied to Terraform without carrying dead
+infrastructure definitions.
 
 ## Target account backend
 
@@ -42,8 +41,9 @@ AWS_PROFILE=accmanmohanusfca terraform -chdir=terraform/bootstrap apply
 Then initialize each stack with `terraform init -reconfigure` from its
 environment directory.
 
-Prod defaults to a single NAT gateway while this account has the default
-Elastic IP quota and the EC2 fallback keeps one EIP allocated.
+Prod defaults to a single NAT gateway to keep the assignment account within the
+expected public IPv4 and NAT cost envelope. Increase the EIP quota and set
+`single_nat_gateway=false` if the defense requires one NAT gateway per AZ.
 
 EKS defaults to Kubernetes `1.34` with AL2023 managed-node AMIs. AWS no longer
 offers the previous `1.29` control-plane version in `us-west-2`.

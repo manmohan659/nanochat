@@ -16,22 +16,14 @@ kube-prometheus-stack:
         registry: docker.io
         repository: prom/prometheus
         tag: v2.54.0
-      ## Scrape samosaChaat app monitors plus kube-prometheus-stack's node and
-      ## cluster monitors so node CPU/memory/disk dashboards have live data.
-      serviceMonitorSelector:
-        matchExpressions:
-          - key: app.kubernetes.io/part-of
-            operator: In
-            values:
-              - samosachaat
-              - kube-prometheus-stack
-              - prometheus-node-exporter
-              - kube-state-metrics
+      ## Scrape all in-cluster ServiceMonitors. This covers the app chart plus
+      ## kube-prometheus-stack's node exporter and kube-state-metrics monitors,
+      ## which are required for CPU, memory, and disk dashboards.
+      serviceMonitorSelector: {}
       serviceMonitorSelectorNilUsesHelmValues: false
-      ## Also evaluate our custom PrometheusRules.
-      ruleSelector:
-        matchLabels:
-          app.kubernetes.io/part-of: samosachaat
+      ## Also evaluate all in-cluster PrometheusRules, including custom
+      ## samosaChaat resource-threshold alerts.
+      ruleSelector: {}
       ruleSelectorNilUsesHelmValues: false
       ## Keep 15 days of metric data on a 50Gi PVC.
       retention: 15d
@@ -117,6 +109,11 @@ kube-prometheus-stack:
         root_url: https://grafana.samosachaat.art
       auth:
         disable_login_form: true
+        oauth_auto_login: true
+      "auth.basic":
+        enabled: false
+      "auth.anonymous":
+        enabled: false
       "auth.github":
         enabled: true
         allow_sign_up: true

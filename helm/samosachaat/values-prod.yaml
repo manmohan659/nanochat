@@ -44,8 +44,6 @@ chatApi:
 
 inference:
   replicaCount: 3
-  env:
-    UPSTREAM_GENERATE_URL: "https://manmohan659--samosachaat-inference-inference-generate.modal.run"
   resources:
     requests:
       cpu: 100m
@@ -62,3 +60,6 @@ inference:
 pdb:
   enabled: true
   minAvailable: 1
+
+ingress:
+  groupName: samosachaat-prod

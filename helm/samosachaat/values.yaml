@@ -116,6 +116,9 @@ inference:
 ingress:
   enabled: true
   host: samosachaat.art
+  ## AWS Load Balancer Controller group. Dev/QA/UAT share one non-prod ALB;
+  ## prod uses its own group. Empty disables explicit grouping.
+  groupName: ""
   ## Optional Grafana host. Enable only in the environment where the
   ## observability chart is installed.
   grafana:

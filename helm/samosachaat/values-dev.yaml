@@ -1,4 +1,4 @@
-## Dev overrides — single-slot, 1 replica, small resources, no HPA.
+## Dev overrides — single-slot, two replicas, small resources, no HPA.
 
 global:
   imageTag: dev-latest
@@ -11,7 +11,7 @@ config:
   LOG_LEVEL: "debug"
 
 frontend:
-  replicaCount: 1
+  replicaCount: 2
   env:
     NEXT_PUBLIC_API_URL: "https://dev.samosachaat.art/api"
   resources:
@@ -23,7 +23,7 @@ frontend:
       memory: 256Mi
 
 auth:
-  replicaCount: 1
+  replicaCount: 2
   env:
     FRONTEND_URL: "https://dev.samosachaat.art"
     AUTH_BASE_URL: "https://dev.samosachaat.art"
@@ -37,7 +37,7 @@ auth:
       memory: 256Mi
 
 chatApi:
-  replicaCount: 1
+  replicaCount: 2
   env:
     FRONTEND_URL: "https://dev.samosachaat.art"
   resources:
@@ -51,7 +51,7 @@ chatApi:
     enabled: false
 
 inference:
-  replicaCount: 1
+  replicaCount: 2
   env:
     UPSTREAM_GENERATE_URL: "https://manmohan659--samosachaat-inference-inference-generate.modal.run"
     UPSTREAM_READ_TIMEOUT_SECONDS: "60"
@@ -67,9 +67,11 @@ inference:
     enabled: false
 
 pdb:
-  enabled: false
+  enabled: true
+  minAvailable: 1
 
 ingress:
   host: dev.samosachaat.art
+  groupName: samosachaat-nonprod
   grafana:
     enabled: false

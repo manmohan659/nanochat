@@ -5,8 +5,6 @@ set -euo pipefail
 # samosaChaat Deploy Switch
 #
 # Usage:
-#   ./deploy.sh ec2          Deploy monolith to EC2 via docker-compose
-#   ./deploy.sh ec2-down     Stop services on EC2
 #   ./deploy.sh eks          Provision EKS + deploy via Helm (demo/grading)
 #   ./deploy.sh eks-down     Tear down EKS (save $$$)
 #   ./deploy.sh status       Show what's currently running
@@ -17,9 +15,6 @@ AWS_PROFILE="${AWS_PROFILE:-accmanmohanusfca}"
 AWS_ACCOUNT="${AWS_ACCOUNT_ID:-906352610196}"
 AWS_REGION="${AWS_REGION:-us-west-2}"
 ECR_REGISTRY="${ECR_REGISTRY:-${AWS_ACCOUNT}.dkr.ecr.${AWS_REGION}.amazonaws.com}"
-EC2_HOST="${EC2_HOST:-16.148.217.62}"
-EC2_USER="ubuntu"
-EC2_KEY="${EC2_KEY:-$HOME/Documents/FinalSemester/DevOps/hellokitty.pem}"
 DOMAIN="samosachaat.art"
 
 export AWS_PROFILE AWS_REGION
@@ -38,102 +33,6 @@ urlencode() {
     python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$1"
 }
 
-#─── EC2 MONOLITH ─────────────────────────────────────────────────────────────
-
-ec2_deploy() {
-    log "Deploying to EC2 monolith at ${EC2_HOST}..."
-
-    # 1. Login to ECR locally to get credentials
-    log "Logging into ECR..."
-    aws ecr get-login-password --region ${AWS_REGION} | \
-        ssh -i "${EC2_KEY}" -o StrictHostKeyChecking=no ${EC2_USER}@${EC2_HOST} \
-        "docker login --username AWS --password-stdin ${ECR_REGISTRY}" 2>/dev/null
-
-    # 2. Sync repo to EC2
-    log "Syncing code to EC2..."
-    ssh -i "${EC2_KEY}" ${EC2_USER}@${EC2_HOST} bash -s << 'REMOTE_SCRIPT'
-        set -e
-        cd /home/ubuntu
-
-        # Clone or update repo
-        if [ -d samosachaat ]; then
-            cd samosachaat
-            git fetch origin master
-            git reset --hard origin/master
-        else
-            git clone https://github.com/manmohan659/nanochat.git samosachaat
-            cd samosachaat
-        fi
-
-        # Ensure .env exists
-        if [ ! -f .env ]; then
-            cp .env.example .env
-            echo "⚠️  Created .env from template — edit it with real values!"
-        fi
-REMOTE_SCRIPT
-
-    # 3. Copy .env from local if it exists
-    if [ -f "${SCRIPT_DIR}/.env" ]; then
-        log "Syncing .env to EC2..."
-        scp -i "${EC2_KEY}" "${SCRIPT_DIR}/.env" ${EC2_USER}@${EC2_HOST}:/home/ubuntu/samosachaat/.env
-    fi
-
-    # 4. Pull images and start services
-    log "Pulling images and starting services..."
-    ssh -i "${EC2_KEY}" ${EC2_USER}@${EC2_HOST} bash -s << REMOTE_DEPLOY
-        set -e
-        cd /home/ubuntu/samosachaat
-
-        # Set ECR registry in environment
-        export ECR_REGISTRY=${ECR_REGISTRY}
-        export IMAGE_TAG=dev-latest
-
-        # Pull latest images
-        docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
-
-        # Start everything
-        docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-
-        # Run DB migrations
-        echo "Running database migrations..."
-        sleep 5  # wait for postgres to be ready
-        docker compose exec -T chat-api alembic -c db/alembic.ini upgrade head 2>/dev/null || \
-            echo "Migrations skipped (may need manual .env setup)"
-
-        echo ""
-        docker compose ps
-REMOTE_DEPLOY
-
-    # 5. Setup SSL if not already done
-    log "Checking SSL..."
-    ssh -i "${EC2_KEY}" ${EC2_USER}@${EC2_HOST} bash -s << 'SSL_CHECK'
-        if [ ! -d /etc/letsencrypt/live/samosachaat.art ]; then
-            echo "Setting up SSL with certbot..."
-            sudo apt-get update -qq && sudo apt-get install -y -qq certbot > /dev/null 2>&1
-            sudo certbot certonly --standalone --non-interactive \
-                --agree-tos -m manmohan659@gmail.com \
-                -d samosachaat.art -d www.samosachaat.art \
-                --pre-hook "docker compose -f /home/ubuntu/samosachaat/docker-compose.yml -f /home/ubuntu/samosachaat/docker-compose.prod.yml stop nginx" \
-                --post-hook "docker compose -f /home/ubuntu/samosachaat/docker-compose.yml -f /home/ubuntu/samosachaat/docker-compose.prod.yml start nginx"
-        else
-            echo "SSL already configured."
-        fi
-SSL_CHECK
-
-    echo ""
-    log "EC2 deploy complete!"
-    log "  App:     https://${DOMAIN}"
-    log "  Grafana: https://${DOMAIN}/grafana/"
-    log "  EC2:     ${EC2_HOST}"
-}
-
-ec2_down() {
-    log "Stopping services on EC2..."
-    ssh -i "${EC2_KEY}" ${EC2_USER}@${EC2_HOST} \
-        "cd /home/ubuntu/samosachaat && docker compose -f docker-compose.yml -f docker-compose.prod.yml down"
-    log "EC2 services stopped."
-}
-
 #─── EKS CLUSTER ──────────────────────────────────────────────────────────────
 
 eks_deploy() {
@@ -145,9 +44,13 @@ eks_deploy() {
     local APP_NAMESPACE="samosachaat-${ENV}"
     local INFRA_ENV="${ENV}"
     local INFRA_TIER="prod"
+    local PUBLIC_HOST="${DOMAIN}"
+    local ALB_STACK_NAME="samosachaat-prod"
     if [[ "${ENV}" =~ ^(dev|qa|uat)$ ]]; then
         INFRA_ENV="dev"
         INFRA_TIER="nonprod"
+        PUBLIC_HOST="${ENV}.${DOMAIN}"
+        ALB_STACK_NAME="samosachaat-nonprod"
     fi
     log "Provisioning ${INFRA_TIER} EKS/RDS infrastructure for runtime env ${ENV}... This takes ~15-20 minutes."
 
@@ -172,29 +75,27 @@ eks_deploy() {
             warn "GitHub Actions role ARN not found; CI/CD will not be able to deploy to ${ENV} until github_actions_role_arn is applied."
         fi
     fi
-    if [ "${ENV}" = "prod" ]; then
-        local EXISTING_ALB_ARN="" EXISTING_ALB_DNS="" EXISTING_ALB_ZONE_ID=""
-        EXISTING_ALB_ARN="$(aws resourcegroupstaggingapi get-resources \
+    local EXISTING_ALB_ARN="" EXISTING_ALB_DNS="" EXISTING_ALB_ZONE_ID=""
+    EXISTING_ALB_ARN="$(aws resourcegroupstaggingapi get-resources \
+        --region "${AWS_REGION}" \
+        --resource-type-filters elasticloadbalancing:loadbalancer \
+        --tag-filters "Key=ingress.k8s.aws/stack,Values=${ALB_STACK_NAME}" \
+        --query 'ResourceTagMappingList[0].ResourceARN' \
+        --output text 2>/dev/null || true)"
+    if [ -n "${EXISTING_ALB_ARN}" ] && [ "${EXISTING_ALB_ARN}" != "None" ]; then
+        EXISTING_ALB_DNS="$(aws elbv2 describe-load-balancers \
             --region "${AWS_REGION}" \
-            --resource-type-filters elasticloadbalancing:loadbalancer \
-            --tag-filters "Key=ingress.k8s.aws/stack,Values=${APP_NAMESPACE}/samosachaat" \
-            --query 'ResourceTagMappingList[0].ResourceARN' \
+            --load-balancer-arns "${EXISTING_ALB_ARN}" \
+            --query 'LoadBalancers[0].DNSName' \
             --output text 2>/dev/null || true)"
-        if [ -n "${EXISTING_ALB_ARN}" ] && [ "${EXISTING_ALB_ARN}" != "None" ]; then
-            EXISTING_ALB_DNS="$(aws elbv2 describe-load-balancers \
-                --region "${AWS_REGION}" \
-                --load-balancer-arns "${EXISTING_ALB_ARN}" \
-                --query 'LoadBalancers[0].DNSName' \
-                --output text 2>/dev/null || true)"
-            EXISTING_ALB_ZONE_ID="$(aws elbv2 describe-load-balancers \
-                --region "${AWS_REGION}" \
-                --load-balancer-arns "${EXISTING_ALB_ARN}" \
-                --query 'LoadBalancers[0].CanonicalHostedZoneId' \
-                --output text 2>/dev/null || true)"
-            if [ -n "${EXISTING_ALB_DNS}" ] && [ "${EXISTING_ALB_DNS}" != "None" ] && \
-               [ -n "${EXISTING_ALB_ZONE_ID}" ] && [ "${EXISTING_ALB_ZONE_ID}" != "None" ]; then
-                TF_APPLY_ARGS+=("-var=alb_dns_name=${EXISTING_ALB_DNS}" "-var=alb_zone_id=${EXISTING_ALB_ZONE_ID}")
-            fi
+        EXISTING_ALB_ZONE_ID="$(aws elbv2 describe-load-balancers \
+            --region "${AWS_REGION}" \
+            --load-balancer-arns "${EXISTING_ALB_ARN}" \
+            --query 'LoadBalancers[0].CanonicalHostedZoneId' \
+            --output text 2>/dev/null || true)"
+        if [ -n "${EXISTING_ALB_DNS}" ] && [ "${EXISTING_ALB_DNS}" != "None" ] && \
+           [ -n "${EXISTING_ALB_ZONE_ID}" ] && [ "${EXISTING_ALB_ZONE_ID}" != "None" ]; then
+            TF_APPLY_ARGS+=("-var=alb_dns_name=${EXISTING_ALB_DNS}" "-var=alb_zone_id=${EXISTING_ALB_ZONE_ID}")
         fi
     fi
 
@@ -270,10 +171,10 @@ eks_deploy() {
         --from-literal="AUTH_SERVICE_URL=http://auth:8001"
         --from-literal="CHAT_API_URL=http://chat-api:8002"
         --from-literal="INFERENCE_SERVICE_URL=${INFERENCE_SERVICE_URL:-http://inference:8003}"
-        --from-literal="AUTH_BASE_URL=https://${DOMAIN}"
-        --from-literal="FRONTEND_URL=https://${DOMAIN}"
+        --from-literal="AUTH_BASE_URL=https://${PUBLIC_HOST}"
+        --from-literal="FRONTEND_URL=https://${PUBLIC_HOST}"
         --from-literal="COOKIE_SECURE=true"
-        --from-literal="COOKIE_DOMAIN=${DOMAIN}"
+        --from-literal="COOKIE_DOMAIN=.${DOMAIN}"
         --from-literal="INTERNAL_API_KEY=${INTERNAL_API_KEY_VALUE}"
         --from-literal="SESSION_SECRET=${SESSION_SECRET_VALUE}"
         --from-file="JWT_PRIVATE_KEY=${JWT_PRIVATE_KEY_FILE_RESOLVED}"
@@ -313,21 +214,10 @@ eks_deploy() {
         warn "Grafana OAuth env vars are incomplete; skipping observability install until real OAuth secrets are present."
     fi
 
-    # Install ALB Ingress Controller
-    if kubectl -n kube-system rollout status deployment/aws-load-balancer-controller --timeout=30s >/dev/null 2>&1; then
-        log "ALB Ingress Controller is already healthy; skipping controller upgrade."
-    else
-        log "Installing ALB Ingress Controller..."
-        helm repo add eks https://aws.github.io/eks-charts 2>/dev/null || true
-        helm repo update
-        helm upgrade --install aws-load-balancer-controller eks/aws-load-balancer-controller \
-            -n kube-system \
-            --set clusterName="${CLUSTER_NAME}" \
-            --set serviceAccount.create=true \
-            --set serviceAccount.name=aws-load-balancer-controller \
-            --set "serviceAccount.annotations.eks\\.amazonaws\\.com/role-arn=$(terraform output -raw alb_controller_role_arn)" \
-            --wait --timeout 5m 2>/dev/null || warn "ALB controller may need IRSA setup"
-    fi
+    log "Installing cluster add-ons..."
+    "${SCRIPT_DIR}/scripts/install-cluster-addons.sh" \
+        "${CLUSTER_NAME}" \
+        "$(terraform output -raw alb_controller_role_arn)"
 
     # Deploy observability stack
     if [ -n "${SLACK_WEBHOOK_URL:-}" ] && [ "${GRAFANA_OAUTH_READY}" = "true" ]; then
@@ -385,50 +275,46 @@ eks_deploy() {
             --wait --timeout 10m
     fi
 
-    if [ "${ENV}" = "prod" ]; then
-        log "Resolving prod ALB address and reconciling Route53 aliases with Terraform..."
-        local ALB_HOST="" ALB_LOOKUP="" ALB_ZONE_ID=""
-        for _ in {1..40}; do
-            ALB_HOST="$(kubectl get ingress samosachaat -n "${APP_NAMESPACE}" -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)"
-            if [ -n "${ALB_HOST}" ]; then
-                break
-            fi
-            sleep 15
-        done
-        if [ -z "${ALB_HOST}" ]; then
-            local ALB_ARN=""
-            ALB_ARN="$(aws resourcegroupstaggingapi get-resources \
-                --region "${AWS_REGION}" \
-                --resource-type-filters elasticloadbalancing:loadbalancer \
-                --tag-filters "Key=ingress.k8s.aws/stack,Values=${APP_NAMESPACE}/samosachaat" \
-                --query 'ResourceTagMappingList[0].ResourceARN' \
-                --output text 2>/dev/null || true)"
-            if [ -n "${ALB_ARN}" ] && [ "${ALB_ARN}" != "None" ]; then
-                ALB_HOST="$(aws elbv2 describe-load-balancers \
-                    --region "${AWS_REGION}" \
-                    --load-balancer-arns "${ALB_ARN}" \
-                    --query 'LoadBalancers[0].DNSName' \
-                    --output text 2>/dev/null || true)"
-            fi
-        fi
+    log "Resolving ${INFRA_TIER} ALB address and reconciling Route53 aliases with Terraform..."
+    local ALB_HOST="" ALB_LOOKUP="" ALB_ZONE_ID=""
+    for _ in {1..40}; do
+        ALB_HOST="$(kubectl get ingress samosachaat -n "${APP_NAMESPACE}" -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)"
         if [ -n "${ALB_HOST}" ]; then
-            ALB_LOOKUP="${ALB_HOST#dualstack.}"
-            ALB_ZONE_ID="$(aws elbv2 describe-load-balancers \
+            break
+        fi
+        sleep 15
+    done
+    if [ -z "${ALB_HOST}" ]; then
+        local ALB_ARN=""
+        ALB_ARN="$(aws resourcegroupstaggingapi get-resources \
+            --region "${AWS_REGION}" \
+            --resource-type-filters elasticloadbalancing:loadbalancer \
+            --tag-filters "Key=ingress.k8s.aws/stack,Values=${ALB_STACK_NAME}" \
+            --query 'ResourceTagMappingList[0].ResourceARN' \
+            --output text 2>/dev/null || true)"
+        if [ -n "${ALB_ARN}" ] && [ "${ALB_ARN}" != "None" ]; then
+            ALB_HOST="$(aws elbv2 describe-load-balancers \
                 --region "${AWS_REGION}" \
-                --query "LoadBalancers[?DNSName=='${ALB_LOOKUP}'].CanonicalHostedZoneId | [0]" \
+                --load-balancer-arns "${ALB_ARN}" \
+                --query 'LoadBalancers[0].DNSName' \
                 --output text 2>/dev/null || true)"
-            if [ -n "${ALB_ZONE_ID}" ] && [ "${ALB_ZONE_ID}" != "None" ]; then
-                terraform apply "${TF_APPLY_ARGS[@]}" \
-                    -var="alb_dns_name=${ALB_LOOKUP}" \
-                    -var="alb_zone_id=${ALB_ZONE_ID}"
-            else
-                warn "Could not resolve ALB hosted-zone ID for ${ALB_LOOKUP}; Route53 alias was not updated."
-            fi
+        fi
+    fi
+    if [ -n "${ALB_HOST}" ]; then
+        ALB_LOOKUP="${ALB_HOST#dualstack.}"
+        ALB_ZONE_ID="$(aws elbv2 describe-load-balancers \
+            --region "${AWS_REGION}" \
+            --query "LoadBalancers[?DNSName=='${ALB_LOOKUP}'].CanonicalHostedZoneId | [0]" \
+            --output text 2>/dev/null || true)"
+        if [ -n "${ALB_ZONE_ID}" ] && [ "${ALB_ZONE_ID}" != "None" ]; then
+            terraform apply "${TF_APPLY_ARGS[@]}" \
+                -var="alb_dns_name=${ALB_LOOKUP}" \
+                -var="alb_zone_id=${ALB_ZONE_ID}"
         else
-            warn "Ingress did not publish an ALB hostname yet; Route53 alias was not updated."
+            warn "Could not resolve ALB hosted-zone ID for ${ALB_LOOKUP}; Route53 alias was not updated."
         fi
     else
-        warn "Skipping Route53 alias reconciliation for ${ENV}; only prod is allowed to move samosachaat.art away from the EC2 fallback."
+        warn "Ingress did not publish an ALB hostname yet; Route53 alias was not updated."
     fi
 
     echo ""
@@ -483,15 +369,6 @@ show_status() {
     log "=== samosaChaat Deployment Status ==="
     echo ""
 
-    # Check EC2
-    echo "EC2 Monolith (${EC2_HOST}):"
-    if ssh -i "${EC2_KEY}" -o ConnectTimeout=5 ${EC2_USER}@${EC2_HOST} \
-        "docker compose -f /home/ubuntu/samosachaat/docker-compose.yml -f /home/ubuntu/samosachaat/docker-compose.prod.yml ps --format 'table {{.Name}}\t{{.Status}}'" 2>/dev/null; then
-        echo ""
-    else
-        echo "  Not running or unreachable."
-    fi
-
     # Check EKS
     echo "EKS Cluster:"
     if kubectl get nodes 2>/dev/null; then
@@ -516,8 +393,6 @@ show_status() {
 #─── MAIN ─────────────────────────────────────────────────────────────────────
 
 case "${1:-help}" in
-    ec2)        ec2_deploy ;;
-    ec2-down)   ec2_down ;;
     eks)        eks_deploy "${2:-dev}" ;;
     eks-down)   eks_down "${2:-dev}" ;;
     status)     show_status ;;
@@ -527,8 +402,6 @@ case "${1:-help}" in
         echo "Usage: ./deploy.sh <mode>"
         echo ""
         echo "Modes:"
-        echo "  ec2          Deploy monolith to EC2 (cheap, always-on)"
-        echo "  ec2-down     Stop EC2 services"
         echo "  eks [env]    Provision EKS + deploy (demo/grading) [dev|qa|uat|prod]"
         echo "  eks-down     Tear down EKS or remove a shared non-prod namespace"
         echo "  status       Show what's running"

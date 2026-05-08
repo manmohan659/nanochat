@@ -1,9 +1,10 @@
 name: Semantic Release
 
 on:
-  push:
-    branches: [master, main, rc]
-  workflow_dispatch:
+  workflow_run:
+    workflows: ["Promote to UAT"]
+    types: [completed]
+    branches: [master, main]
 
 concurrency:
   group: semantic-release-${{ github.ref }}
@@ -16,13 +17,19 @@ permissions:
 
 jobs:
   release:
-    name: Create release tag from Conventional Commits
+    name: Create release tag after UAT passes
+    if: github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.event.workflow_run.head_sha }}
           token: ${{ secrets.SEMANTIC_RELEASE_TOKEN || secrets.INFRA_REPO_PAT || github.token }}
+
+      - name: Check out promoted branch tip
+        run: |
+          git checkout -B "${{ github.event.workflow_run.head_branch }}" "${{ github.event.workflow_run.head_sha }}"
 
       - uses: actions/setup-node@v4
         with:
@@ -40,12 +47,9 @@ jobs:
       - name: Install semantic-release
         run: |
           npm install --global semantic-release \
-            @semantic-release/changelog \
-            @semantic-release/git \
             @semantic-release/github \
             @semantic-release/commit-analyzer \
-            @semantic-release/release-notes-generator \
-            @semantic-release/npm
+            @semantic-release/release-notes-generator
 
       - name: Run semantic-release
         env:
