@@ -7,6 +7,7 @@
 ## "grafana" on port 3000 in the same namespace).
 
 kube-prometheus-stack:
+  enabled: true
   fullnameOverride: prom
 
   ## ----------------------- Prometheus -----------------------
@@ -96,6 +97,8 @@ kube-prometheus-stack:
         root_url: https://grafana.samosachaat.art
       auth:
         disable_login_form: true
+      "auth.basic":
+        enabled: false
       "auth.github":
         enabled: true
         allow_sign_up: true
@@ -250,9 +253,14 @@ kube-prometheus-stack:
 
 ## ----------------------- Loki stack -----------------------
 loki-stack:
+  enabled: true
   loki:
     enabled: true
     isDefault: false
+    service:
+      annotations:
+        alb.ingress.kubernetes.io/healthcheck-path: /ready
+        alb.ingress.kubernetes.io/success-codes: "200"
     persistence:
       enabled: true
       size: 50Gi
@@ -281,52 +289,22 @@ loki-stack:
               expressions:
                 level: level
                 service: service
+                session_trace_id: session_trace_id
                 trace_id: trace_id
                 user_id: user_id
           - labels:
               level:
               service:
-      scrapeConfigs: |
-        - job_name: kubernetes-pods
-          pipeline_stages:
-            - cri: {}
-            - json:
-                expressions:
-                  level: level
-                  service: service
-                  trace_id: trace_id
-                  user_id: user_id
-            - labels:
-                level:
-                service:
-          kubernetes_sd_configs:
-            - role: pod
-          relabel_configs:
-            - source_labels:
-                - __meta_kubernetes_namespace
-              target_label: namespace
-            - source_labels:
-                - __meta_kubernetes_pod_name
-              target_label: pod
-            - source_labels:
-                - __meta_kubernetes_pod_label_app_kubernetes_io_name
-              target_label: app
-            - source_labels:
-                - __meta_kubernetes_pod_label_app_kubernetes_io_component
-              target_label: component
-            - source_labels:
-                - __meta_kubernetes_pod_label_app_kubernetes_io_part_of
-              target_label: part_of
-            - source_labels:
-                - __meta_kubernetes_pod_container_name
-              target_label: container
-            - action: replace
-              replacement: /var/log/pods/*$1/*.log
-              separator: /
-              source_labels:
-                - __meta_kubernetes_pod_uid
-                - __meta_kubernetes_pod_container_name
-              target_label: __path__
+        extraRelabelConfigs:
+          - source_labels:
+              - __meta_kubernetes_pod_label_app_kubernetes_io_component
+              - __meta_kubernetes_pod_label_component
+            regex: ^;*([^;]+)(;.*)?$
+            action: replace
+            target_label: service
+          - source_labels:
+              - __meta_kubernetes_pod_label_app_kubernetes_io_part_of
+            target_label: part_of
 
   prometheus:
     enabled: false

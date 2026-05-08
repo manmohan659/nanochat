@@ -1,0 +1,164 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {"type": "grafana", "uid": "-- Grafana --"},
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "liveNow": false,
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Log volume by namespace and component",
+      "id": 1,
+      "datasource": {"type": "loki", "uid": "${DS_LOKI}"},
+      "gridPos": {"h": 8, "w": 24, "x": 0, "y": 0},
+      "fieldConfig": {"defaults": {"unit": "short"}, "overrides": []},
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}, "tooltip": {"mode": "multi"}},
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "loki", "uid": "${DS_LOKI}"},
+          "expr": "sum by (namespace, component) (count_over_time({namespace=~\"samosachaat-dev|samosachaat-uat|samosachaat-prod\", component=~\"$component\"}[5m]))",
+          "queryType": "range",
+          "legendFormat": "{{namespace}} / {{component}}"
+        }
+      ]
+    },
+    {
+      "type": "logs",
+      "title": "Dev logs",
+      "id": 2,
+      "datasource": {"type": "loki", "uid": "${DS_LOKI}"},
+      "gridPos": {"h": 10, "w": 24, "x": 0, "y": 8},
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showCommonLabels": false,
+        "showLabels": true,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "loki", "uid": "${DS_LOKI}"},
+          "expr": "{namespace=\"samosachaat-dev\", component=~\"$component\"}",
+          "queryType": "range"
+        }
+      ]
+    },
+    {
+      "type": "logs",
+      "title": "UAT logs",
+      "id": 3,
+      "datasource": {"type": "loki", "uid": "${DS_LOKI}"},
+      "gridPos": {"h": 10, "w": 24, "x": 0, "y": 18},
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showCommonLabels": false,
+        "showLabels": true,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "loki", "uid": "${DS_LOKI}"},
+          "expr": "{namespace=\"samosachaat-uat\", component=~\"$component\"}",
+          "queryType": "range"
+        }
+      ]
+    },
+    {
+      "type": "logs",
+      "title": "Prod logs",
+      "id": 4,
+      "datasource": {"type": "loki", "uid": "${DS_LOKI}"},
+      "gridPos": {"h": 10, "w": 24, "x": 0, "y": 28},
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showCommonLabels": false,
+        "showLabels": true,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {"type": "loki", "uid": "${DS_LOKI}"},
+          "expr": "{namespace=\"samosachaat-prod\", component=~\"$component\"}",
+          "queryType": "range"
+        }
+      ]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "style": "dark",
+  "tags": ["samosachaat", "logs", "loki"],
+  "templating": {
+    "list": [
+      {
+        "current": {"selected": false, "text": "Loki", "value": "loki"},
+        "hide": 0,
+        "includeAll": false,
+        "label": "Datasource",
+        "multi": false,
+        "name": "DS_LOKI",
+        "options": [],
+        "query": "loki",
+        "queryValue": "",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource"
+      },
+      {
+        "allValue": ".*",
+        "current": {"selected": true, "text": "All", "value": "$__all"},
+        "hide": 0,
+        "includeAll": true,
+        "label": "Component",
+        "multi": true,
+        "name": "component",
+        "options": [
+          {"selected": false, "text": "frontend", "value": "frontend"},
+          {"selected": false, "text": "auth", "value": "auth"},
+          {"selected": false, "text": "chat-api", "value": "chat-api"},
+          {"selected": false, "text": "inference", "value": "inference"}
+        ],
+        "query": "frontend,auth,chat-api,inference",
+        "queryValue": "",
+        "skipUrlSync": false,
+        "type": "custom"
+      }
+    ]
+  },
+  "time": {"from": "now-1h", "to": "now"},
+  "timepicker": {},
+  "timezone": "",
+  "title": "samosaChaat - Logs",
+  "uid": "samosachaat-logs",
+  "version": 1,
+  "weekStart": ""
+}

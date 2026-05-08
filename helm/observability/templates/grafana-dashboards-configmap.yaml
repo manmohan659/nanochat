@@ -5,6 +5,11 @@ listed under grafana.dashboardsConfigMaps (see values.yaml) at
 /var/lib/grafana/dashboards/<key>/, which the matching dashboardProvider picks
 up and loads.
 */}}
+{{- $kps := index .Values "kube-prometheus-stack" -}}
+{{- $grafana := get $kps "grafana" | default dict -}}
+{{- $kpsEnabled := get $kps "enabled" | default true -}}
+{{- $grafanaEnabled := get $grafana "enabled" | default true -}}
+{{- if and $kpsEnabled $grafanaEnabled }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -18,4 +23,5 @@ data:
 {{- range $path, $_ := .Files.Glob "dashboards/*.json" }}
   {{ base $path }}: |-
 {{ $.Files.Get $path | indent 4 }}
+{{- end }}
 {{- end }}

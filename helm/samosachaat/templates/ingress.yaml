@@ -3,6 +3,19 @@
 {{- $frontendSvc := include "samosachaat.svcNameForSlot" (dict "svc" "frontend" "slot" $targetSlot) -}}
 {{- $authSvc := include "samosachaat.svcNameForSlot" (dict "svc" "auth" "slot" $targetSlot) -}}
 {{- $chatApiSvc := include "samosachaat.svcNameForSlot" (dict "svc" "chat-api" "slot" $targetSlot) -}}
+{{- $ingress := .Values.ingress | default dict -}}
+{{- $grafana := get $ingress "grafana" | default dict -}}
+{{- $lokiPush := get $ingress "lokiPush" | default dict -}}
+{{- $grafanaEnabled := get $grafana "enabled" | default true -}}
+{{- $grafanaHost := get $grafana "host" | default (.Values.ingress.grafanaHost | default "grafana.samosachaat.art") -}}
+{{- $grafanaServiceName := get $grafana "serviceName" | default (.Values.ingress.grafanaServiceName | default "grafana") -}}
+{{- $grafanaServicePort := get $grafana "servicePort" | default (.Values.ingress.grafanaServicePort | default 3000) -}}
+{{- $lokiPushEnabled := get $lokiPush "enabled" | default false -}}
+{{- $lokiPushHost := get $lokiPush "host" | default $grafanaHost -}}
+{{- $lokiPushPath := get $lokiPush "path" | default "/loki/api/v1/push" -}}
+{{- $lokiPushServiceName := get $lokiPush "serviceName" | default "observability-loki" -}}
+{{- $lokiPushServicePort := get $lokiPush "servicePort" | default 3100 -}}
+{{- $lokiPushSourceCidrs := get $lokiPush "sourceCidrs" | default list -}}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -20,6 +33,9 @@ metadata:
     alb.ingress.kubernetes.io/target-group-attributes: deregistration_delay.timeout_seconds=30
     {{- with .Values.ingress.acmCertArn }}
     alb.ingress.kubernetes.io/certificate-arn: {{ . | quote }}
+    {{- end }}
+    {{- if and $lokiPushEnabled $lokiPushSourceCidrs }}
+    alb.ingress.kubernetes.io/conditions.{{ $lokiPushServiceName }}: {{ list (dict "field" "source-ip" "sourceIpConfig" (dict "values" $lokiPushSourceCidrs)) | toJson | quote }}
     {{- end }}
 spec:
   rules:
@@ -47,14 +63,37 @@ spec:
                 name: {{ $frontendSvc }}
                 port:
                   number: {{ .Values.frontend.port }}
-    - host: {{ .Values.ingress.grafanaHost | quote }}
+    {{- if $grafanaEnabled }}
+    - host: {{ $grafanaHost | quote }}
       http:
         paths:
+          {{- if and $lokiPushEnabled (eq $lokiPushHost $grafanaHost) }}
+          - path: {{ $lokiPushPath }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $lokiPushServiceName }}
+                port:
+                  number: {{ $lokiPushServicePort }}
+          {{- end }}
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: {{ .Values.ingress.grafanaServiceName }}
+                name: {{ $grafanaServiceName }}
                 port:
-                  number: {{ .Values.ingress.grafanaServicePort }}
+                  number: {{ $grafanaServicePort }}
+    {{- end }}
+    {{- if and $lokiPushEnabled (or (not $grafanaEnabled) (ne $lokiPushHost $grafanaHost)) }}
+    - host: {{ $lokiPushHost | quote }}
+      http:
+        paths:
+          - path: {{ $lokiPushPath }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ $lokiPushServiceName }}
+                port:
+                  number: {{ $lokiPushServicePort }}
+    {{- end }}
 {{- end }}
