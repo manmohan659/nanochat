@@ -10,7 +10,6 @@ AWS_REGION="${AWS_REGION:-us-west-2}"
 AWS_ACCOUNT_ID="${AWS_ACCOUNT_ID:-906352610196}"
 PROJECT_PREFIX="${PROJECT_PREFIX:-samosachaat}"
 STATE_DIR="${STATE_DIR:-${ROOT_DIR}/.aws-cost}"
-EC2_FALLBACK_INSTANCE_ID="${EC2_FALLBACK_INSTANCE_ID:-i-0ffd4a06829de2f1c}"
 
 export AWS_PROFILE AWS_REGION
 
@@ -179,14 +178,6 @@ wait_for_rds_status() {
   done
   warn "Timed out waiting for ${db} to become ${wanted}; current status is ${status:-unknown}."
   return 1
-}
-
-fallback_instance_state() {
-  aws ec2 describe-instances \
-    --region "$AWS_REGION" \
-    --instance-ids "$EC2_FALLBACK_INSTANCE_ID" \
-    --query 'Reservations[0].Instances[0].State.Name' \
-    --output text 2>/dev/null || true
 }
 
 count_samosachaat_albs() {

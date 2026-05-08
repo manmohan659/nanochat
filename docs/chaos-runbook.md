@@ -15,7 +15,7 @@ how to simulate it, how to detect it via Grafana/Loki, and recovery steps.
 
 **Simulate:**
 ```bash
-kubectl delete pod -l app.kubernetes.io/name=chat-api -n samosachaat-prod
+kubectl delete pod -l app.kubernetes.io/component=chat-api -n samosachaat-prod
 ```
 
 **Detect (Grafana):**
@@ -37,7 +37,7 @@ kubectl delete pod -l app.kubernetes.io/name=chat-api -n samosachaat-prod
 
 **Verify recovered:**
 ```bash
-kubectl get pods -n samosachaat-prod -l app.kubernetes.io/name=chat-api
+kubectl get pods -n samosachaat-prod -l app.kubernetes.io/component=chat-api
 curl -s https://samosachaat.art/api/health | jq .
 ```
 
@@ -169,7 +169,7 @@ kubectl run loadtest --image=curlimages/curl --restart=Never -n samosachaat-prod
 - `curl -vI https://samosachaat.art 2>&1 | grep -i "expire\|ssl\|certificate"`
 
 **Recovery:**
-- ACM certificates auto-renew — check ACM console for renewal status
+- ACM certificates auto-renew; verify renewal status with `aws acm describe-certificate`
 - If DNS validation failed: check Route53 CNAME records match ACM requirements
 - `terraform apply` to reconcile if records drifted
 

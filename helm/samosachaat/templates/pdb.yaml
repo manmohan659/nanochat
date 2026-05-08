@@ -1,6 +1,7 @@
 {{- if .Values.pdb.enabled }}
-{{- range $svc := list "frontend" "auth" "chat-api" "inference" }}
-{{- $svcName := include "samosachaat.svcName" (dict "root" $ "svc" $svc) }}
+{{- range $svc := list (dict "name" "frontend" "enabled" $.Values.frontend.enabled) (dict "name" "auth" "enabled" $.Values.auth.enabled) (dict "name" "chat-api" "enabled" $.Values.chatApi.enabled) (dict "name" "inference" "enabled" $.Values.inference.enabled) }}
+{{- if $svc.enabled }}
+{{- $svcName := include "samosachaat.svcName" (dict "root" $ "svc" $svc.name) }}
 ---
 apiVersion: policy/v1
 kind: PodDisruptionBudget
@@ -9,11 +10,12 @@ metadata:
   namespace: {{ include "samosachaat.namespace" $ }}
   labels:
     {{- include "samosachaat.labels" $ | nindent 4 }}
-    {{- include "samosachaat.selectorLabels" (dict "root" $ "svc" $svc) | nindent 4 }}
+    {{- include "samosachaat.selectorLabels" (dict "root" $ "svc" $svc.name) | nindent 4 }}
 spec:
   minAvailable: {{ $.Values.pdb.minAvailable }}
   selector:
     matchLabels:
-      {{- include "samosachaat.selectorLabels" (dict "root" $ "svc" $svc) | nindent 6 }}
+      {{- include "samosachaat.selectorLabels" (dict "root" $ "svc" $svc.name) | nindent 6 }}
+{{- end }}
 {{- end }}
 {{- end }}

@@ -1,15 +1,15 @@
 # samosaChaat EKS Defense Notes
 
-This is the final architecture for the DevOps assignment. The EC2 host at
-`16.148.217.62` remains only as a fallback until EKS production is validated and
-DNS is intentionally cut over.
+This is the final architecture for the DevOps assignment. Production traffic is
+served by EKS through Terraform-managed Route53, ACM, and ALB Ingress resources;
+the repository no longer carries an EC2 deployment path.
 
 ## Architecture Diagram
 
 ```mermaid
 flowchart LR
-  user["User browser"] --> godaddy["GoDaddy registrar"]
-  godaddy --> route53["Route53 hosted zone"]
+  user["User browser"] --> registrar["Custom domain registrar"]
+  registrar --> route53["Terraform-managed Route53 hosted zone"]
   route53 --> alb["AWS ALB Ingress HTTPS"]
   alb --> frontend["frontend Next.js"]
   alb --> auth["auth FastAPI"]
@@ -54,10 +54,10 @@ This is intentional: non-prod gets logical isolation by database, namespace, and
 app role; prod gets physical RDS isolation. See
 `docs/rds-cost-isolation-strategy.md` for the defense narrative.
 
-As of the migration run, dev, QA, and UAT are deployed on the non-prod cluster
-and use `samosachaat-nonprod-pg`. Production RDS creation is intentionally held
-until the old physical `samosachaat-uat-pg` instance is approved for
-snapshot-and-delete.
+Dev, QA, and UAT deploy on the non-prod cluster and use
+`samosachaat-nonprod-pg`. Production uses `samosachaat-prod-pg`, which is
+declared in the prod Terraform stack with Multi-AZ enabled, backups retained,
+and deletion protection.
 
 ## Request Flow
 

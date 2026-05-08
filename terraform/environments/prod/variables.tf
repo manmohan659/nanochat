@@ -11,7 +11,7 @@ variable "environment" {
 }
 
 variable "domain_name" {
-  description = "Apex domain — must already have a Route53 hosted zone."
+  description = "Apex domain managed through Route53."
   type        = string
   default     = "samosachaat.art"
 }

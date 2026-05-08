@@ -1,6 +1,12 @@
-# uat
+# UAT
 
-User acceptance testing environment stack scaffold.
+User acceptance testing is a logical runtime on shared non-prod infrastructure.
 
-Use this directory to compose the shared Terraform modules with UAT-specific
-variables, state backends, and deployment topology.
+This stack intentionally does not declare standalone VPC, EKS, or RDS resources.
+It reads the dev/non-prod Terraform state and exposes UAT-specific outputs used
+by GitHub Actions and deployment scripts:
+
+- cluster endpoint/name for `samosachaat-dev-eks`
+- shared non-prod RDS endpoint/password
+- logical database name `samosachaat_uat`
+- shared ACM certificate, Route53 zone, and GitHub OIDC role

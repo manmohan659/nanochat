@@ -11,7 +11,9 @@ config:
   LOG_LEVEL: "info"
 
 frontend:
-  replicaCount: 1
+  replicaCount: 2
+  env:
+    NEXT_PUBLIC_API_URL: "https://qa.samosachaat.art/api"
   resources:
     requests:
       cpu: 50m
@@ -21,7 +23,7 @@ frontend:
       memory: 256Mi
 
 auth:
-  replicaCount: 1
+  replicaCount: 2
   resources:
     requests:
       cpu: 50m
@@ -31,7 +33,7 @@ auth:
       memory: 256Mi
 
 chatApi:
-  replicaCount: 1
+  replicaCount: 2
   resources:
     requests:
       cpu: 100m
@@ -43,7 +45,7 @@ chatApi:
     enabled: false
 
 inference:
-  replicaCount: 1
+  replicaCount: 2
   resources:
     requests:
       cpu: 250m
@@ -55,4 +57,11 @@ inference:
     enabled: false
 
 pdb:
-  enabled: false
+  enabled: true
+  minAvailable: 1
+
+ingress:
+  host: qa.samosachaat.art
+  groupName: samosachaat-nonprod
+  grafana:
+    enabled: false

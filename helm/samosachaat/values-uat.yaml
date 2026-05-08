@@ -69,5 +69,6 @@ pdb:
 
 ingress:
   host: uat.samosachaat.art
+  groupName: samosachaat-nonprod
   grafana:
     enabled: false

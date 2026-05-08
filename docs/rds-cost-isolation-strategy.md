@@ -48,25 +48,10 @@ placing dev, QA, and UAT as separate namespaces in the shared non-prod EKS/VPC.
 - `terraform/environments/uat` no longer declares a physical RDS instance; UAT
   runtime deploys to the shared non-prod cluster namespace.
 
-The old separate UAT RDS (`samosachaat-uat-pg`) still exists from the earlier
-migration path. It must be snapshotted and deleted before `samosachaat-prod-pg`
-can be created while honoring the two-RDS cost-control decision, because the
-account is already using the two allowed active RDS instances for this project.
-Do not delete it without explicit approval; the safe decommission path is:
-
-```bash
-AWS_PROFILE=accmanmohanusfca aws rds create-db-snapshot \
-  --db-instance-identifier samosachaat-uat-pg \
-  --db-snapshot-identifier samosachaat-uat-pg-pre-nonprod-$(date -u +%Y%m%d%H%M%S) \
-  --region us-west-2
-
-AWS_PROFILE=accmanmohanusfca aws rds wait db-snapshot-completed \
-  --db-snapshot-identifier <snapshot-id> \
-  --region us-west-2
-
-AWS_PROFILE=accmanmohanusfca terraform -chdir=terraform/environments/uat apply \
-  -var=github_actions_role_arn=arn:aws:iam::906352610196:role/samosachaat-dev-github-actions
-```
+If a legacy standalone UAT database exists in a live account from an earlier
+migration path, it is outside the target platform. Snapshot and remove it as a
+separate cleanup task so the grading architecture remains exactly two active RDS
+instances.
 
 ## Operational Commands
 

@@ -6,7 +6,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/aws-cost-lib.sh"
 
 AUTO_APPROVE="false"
-INCLUDE_EC2="false"
 RESTORE_APPS="false"
 SKIP_RDS="false"
 SKIP_NODES="false"
@@ -14,12 +13,11 @@ SKIP_NODES="false"
 usage() {
   cat <<'USAGE'
 Usage:
-  ./scripts/aws-cost-up.sh [--yes] [--include-ec2] [--restore-apps] [--skip-rds] [--skip-nodes]
+  ./scripts/aws-cost-up.sh [--yes] [--restore-apps] [--skip-rds] [--skip-nodes]
 
 Starts the reversible sleep-mode resources:
   - start stopped samosaChaat RDS instances
   - restore EKS node group sizes from .aws-cost/nodegroups/*.json
-  - optionally start the EC2 fallback with --include-ec2
   - optionally restore dev/QA/UAT Helm app releases with --restore-apps
 
 If you deleted clusters or VPCs manually, run Terraform apply first.
@@ -29,7 +27,6 @@ USAGE
 while [[ "$#" -gt 0 ]]; do
   case "$1" in
     --yes|-y) AUTO_APPROVE="true" ;;
-    --include-ec2) INCLUDE_EC2="true" ;;
     --restore-apps) RESTORE_APPS="true" ;;
     --skip-rds) SKIP_RDS="true" ;;
     --skip-nodes) SKIP_NODES="true" ;;
@@ -101,21 +98,6 @@ if [[ "$SKIP_NODES" != "true" ]]; then
           --nodegroup-name "$nodegroup"
       done <<< "$nodegroups"
     done <<< "$clusters"
-  fi
-fi
-
-if [[ "$INCLUDE_EC2" == "true" ]]; then
-  state="$(fallback_instance_state)"
-  if [[ "$state" == "stopped" ]]; then
-    log "Starting EC2 fallback ${EC2_FALLBACK_INSTANCE_ID}."
-    aws ec2 start-instances \
-      --region "$AWS_REGION" \
-      --instance-ids "$EC2_FALLBACK_INSTANCE_ID" >/dev/null
-    aws ec2 wait instance-running \
-      --region "$AWS_REGION" \
-      --instance-ids "$EC2_FALLBACK_INSTANCE_ID"
-  else
-    log "EC2 fallback ${EC2_FALLBACK_INSTANCE_ID} is ${state:-unknown}; no start needed."
   fi
 fi
 

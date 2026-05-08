@@ -1,8 +1,8 @@
 {{/*
 ServiceMonitor CRs so the Prometheus instance deployed by the observability
-chart discovers and scrapes the samosaChaat backend services. Prometheus
-selects only ServiceMonitors labelled app.kubernetes.io/part-of=samosachaat
-(see helm/observability/values.yaml -> prometheus.serviceMonitorSelector).
+chart discovers and scrapes the samosaChaat backend services. The observability
+chart selects all in-cluster ServiceMonitors so node and application metrics are
+both available.
 
 Each backend Python service exposes /metrics via
 prometheus-fastapi-instrumentator. The frontend (Next.js) is omitted until it

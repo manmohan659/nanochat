@@ -2,14 +2,29 @@
 set -euo pipefail
 
 # Rotate EKS managed node group to latest AMI with zero downtime.
-# Usage: ./scripts/rotate-nodes.sh <environment> [--yes]
+# Usage: ./scripts/rotate-nodes.sh <environment> [--yes] [--watch]
 # Example: ./scripts/rotate-nodes.sh prod --yes
 
 ENVIRONMENT="${1:?Usage: rotate-nodes.sh <environment> (dev|qa|uat|prod)}"
+shift || true
 AUTO_APPROVE="false"
-if [[ "${2:-}" == "--yes" || "${2:-}" == "-y" ]]; then
-    AUTO_APPROVE="true"
-fi
+WATCH_NODES="false"
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --yes|-y|--auto-approve)
+            AUTO_APPROVE="true"
+            shift
+            ;;
+        --watch)
+            WATCH_NODES="true"
+            shift
+            ;;
+        *)
+            echo "Unknown option: $1" >&2
+            exit 2
+            ;;
+    esac
+done
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INFRA_ENVIRONMENT="$ENVIRONMENT"
 if [[ "$ENVIRONMENT" =~ ^(qa|uat)$ ]]; then
@@ -17,12 +32,18 @@ if [[ "$ENVIRONMENT" =~ ^(qa|uat)$ ]]; then
 fi
 RUNTIME_NAMESPACE="samosachaat-$ENVIRONMENT"
 TF_DIR="$SCRIPT_DIR/../terraform/environments/$INFRA_ENVIRONMENT"
-AWS_PROFILE="${AWS_PROFILE:-accmanmohanusfca}"
 AWS_REGION="${AWS_REGION:-us-west-2}"
 AWS_ACCOUNT_ID="${AWS_ACCOUNT_ID:-906352610196}"
 GITHUB_ACTIONS_ROLE_ARN="${GITHUB_ACTIONS_ROLE_ARN:-arn:aws:iam::${AWS_ACCOUNT_ID}:role/samosachaat-dev-github-actions}"
 
-export AWS_PROFILE AWS_REGION
+if [[ -z "${AWS_PROFILE:-}" && -z "${GITHUB_ACTIONS:-}" ]]; then
+    AWS_PROFILE="accmanmohanusfca"
+fi
+
+export AWS_REGION
+if [[ -n "${AWS_PROFILE:-}" ]]; then
+    export AWS_PROFILE
+fi
 
 if [[ ! "$ENVIRONMENT" =~ ^(dev|qa|uat|prod)$ ]]; then
     echo "Unsupported environment: $ENVIRONMENT" >&2
@@ -39,6 +60,7 @@ echo "=== samosaChaat Node Rotation — $ENVIRONMENT runtime on $INFRA_ENVIRONME
 echo ""
 echo "Step 1: Check current AMI vs latest available"
 cd "$TF_DIR"
+terraform init -input=false
 
 echo ""
 echo "Step 2: Apply Terraform to update launch template with latest AMI"
@@ -58,9 +80,9 @@ fi
 
 if [[ "$AUTO_APPROVE" == "true" || "${REPLY:-}" =~ ^[Yy]$ ]]; then
     if [[ "${#terraform_args[@]}" -gt 0 ]]; then
-        terraform apply -auto-approve "${terraform_args[@]}"
+        terraform apply -input=false -auto-approve "${terraform_args[@]}"
     else
-        terraform apply -auto-approve
+        terraform apply -input=false -auto-approve
     fi
 else
     echo "Aborted."
@@ -80,9 +102,9 @@ kubectl get pdb -n "$RUNTIME_NAMESPACE" || true
 
 echo ""
 echo "Step 4: Monitor node rotation"
-if [[ "$AUTO_APPROVE" == "true" ]]; then
-    kubectl get nodes
-else
+kubectl wait --for=condition=Ready nodes --all --timeout=20m
+kubectl get nodes -o wide
+if [[ "$WATCH_NODES" == "true" ]]; then
     echo "Watching nodes (Ctrl+C to stop):"
     kubectl get nodes -w
 fi

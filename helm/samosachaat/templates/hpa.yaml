@@ -1,4 +1,4 @@
-{{- if .Values.chatApi.hpa.enabled }}
+{{- if and .Values.chatApi.enabled .Values.chatApi.hpa.enabled }}
 {{- $svcName := include "samosachaat.svcName" (dict "root" . "svc" "chat-api") }}
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
@@ -23,7 +23,7 @@ spec:
           type: Utilization
           averageUtilization: {{ .Values.chatApi.hpa.targetCPUUtilizationPercentage }}
 {{- end }}
-{{- if .Values.inference.hpa.enabled }}
+{{- if and .Values.inference.enabled .Values.inference.hpa.enabled }}
 {{- $svcName := include "samosachaat.svcName" (dict "root" . "svc" "inference") }}
 ---
 apiVersion: autoscaling/v2

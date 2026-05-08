@@ -23,7 +23,14 @@ spec:
       labels:
         {{- include "samosachaat.selectorLabels" (dict "root" . "svc" "inference") | nindent 8 }}
     spec:
-      terminationGracePeriodSeconds: 60
+      terminationGracePeriodSeconds: 90
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              {{- include "samosachaat.selectorLabels" (dict "root" . "svc" "inference") | nindent 14 }}
       {{- with .Values.global.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
@@ -36,9 +43,14 @@ spec:
             - name: http
               containerPort: {{ .Values.inference.port }}
               protocol: TCP
+          lifecycle:
+            preStop:
+              exec:
+                command: ["sh", "-c", "sleep 30"]
           envFrom:
             - configMapRef:
                 name: samosachaat-config
+                optional: true
             - secretRef:
                 name: samosachaat-secrets
                 optional: true
