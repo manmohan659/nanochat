@@ -14,6 +14,15 @@ helm repo add eks https://aws.github.io/eks-charts >/dev/null
 helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/ >/dev/null
 helm repo update >/dev/null
 
+if [[ "${REPAIR_ALB_WEBHOOK:-true}" == "true" ]]; then
+  # The AWS Load Balancer Controller admission webhook can keep a stale CA bundle
+  # after controller/chart replacement. Recreate the generated TLS material so
+  # subsequent Ingress patches do not fail x509 verification.
+  kubectl delete validatingwebhookconfiguration aws-load-balancer-webhook --ignore-not-found >/dev/null
+  kubectl delete mutatingwebhookconfiguration aws-load-balancer-webhook --ignore-not-found >/dev/null
+  kubectl delete secret aws-load-balancer-webhook-tls -n kube-system --ignore-not-found >/dev/null
+fi
+
 helm upgrade --install aws-load-balancer-controller eks/aws-load-balancer-controller \
   -n kube-system \
   --set clusterName="${CLUSTER_NAME}" \
