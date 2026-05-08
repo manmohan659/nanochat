@@ -219,6 +219,7 @@ jobs:
             --wait --timeout 10m
 
       - name: Reconcile DNS aliases through Terraform
+        if: vars.TERRAFORM_APPLY_ENABLED == 'true'
         env:
           GITHUB_ACTIONS_ROLE_ARN: ${{ secrets.AWS_ROLE_ARN }}
         run: ./scripts/reconcile-route53-alias.sh prod
