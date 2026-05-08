@@ -56,37 +56,65 @@ urlencode() {
   python3 -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$1"
 }
 
-terraform -chdir="$TF_DIR" init -input=false >/dev/null
-
-DB_ENDPOINT="$(terraform -chdir="$TF_DIR" output -raw rds_endpoint)"
-DB_HOST="${DB_ENDPOINT%:*}"
-DB_PORT="${DB_ENDPOINT##*:}"
-DB_MASTER_PASSWORD="$(terraform -chdir="$TF_DIR" output -raw rds_password)"
+secret_value() {
+  local key="$1"
+  kubectl get secret samosachaat-secrets \
+    -n "$NAMESPACE" \
+    -o "jsonpath={.data.${key}}" 2>/dev/null | base64 -d 2>/dev/null || true
+}
 
 kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 
-if [[ -z "${DB_APP_PASSWORD:-}" ]]; then
-  existing_url="$(
-    kubectl get secret samosachaat-secrets \
-      -n "$NAMESPACE" \
-      -o jsonpath='{.data.DATABASE_URL}' 2>/dev/null | base64 -d 2>/dev/null || true
-  )"
-  if [[ -n "$existing_url" ]]; then
+existing_url="$(secret_value DATABASE_URL)"
+existing_db_name="$(secret_value DATABASE_NAME)"
+existing_db_user="$(secret_value DATABASE_USER)"
+existing_tier="$(secret_value RDS_ISOLATION_TIER)"
+
+using_existing_database_url=false
+
+if [[ -z "${DB_ENDPOINT:-}" || -z "${DB_MASTER_PASSWORD:-}" ]]; then
+  if terraform -chdir="$TF_DIR" init -input=false >/dev/null 2>&1; then
+    if ! DB_ENDPOINT="$(terraform -chdir="$TF_DIR" output -raw rds_endpoint 2>/dev/null)" ||
+      ! DB_MASTER_PASSWORD="$(terraform -chdir="$TF_DIR" output -raw rds_password 2>/dev/null)"; then
+      DB_ENDPOINT=""
+      DB_MASTER_PASSWORD=""
+    fi
+  fi
+fi
+
+if [[ -n "${DB_ENDPOINT:-}" && -n "${DB_MASTER_PASSWORD:-}" ]]; then
+  DB_HOST="${DB_ENDPOINT%:*}"
+  DB_PORT="${DB_ENDPOINT##*:}"
+elif [[ -n "$existing_url" ]]; then
+  using_existing_database_url=true
+  DATABASE_URL="$existing_url"
+  DB_NAME="${existing_db_name:-$DB_NAME}"
+  DB_APP_USER="${existing_db_user:-$DB_APP_USER}"
+  RDS_ISOLATION_TIER="${existing_tier:-$RDS_ISOLATION_TIER}"
+else
+  echo "Terraform database outputs are unavailable and no existing DATABASE_URL was found in $NAMESPACE" >&2
+  exit 1
+fi
+
+if [[ "$using_existing_database_url" == "false" ]]; then
+  if [[ -z "${DB_APP_PASSWORD:-}" && -n "$existing_url" ]]; then
     DB_APP_PASSWORD="$(
       python3 -c 'import sys, urllib.parse; print(urllib.parse.unquote(urllib.parse.urlsplit(sys.argv[1]).password or ""))' "$existing_url"
     )"
   fi
-fi
-if [[ -z "${DB_APP_PASSWORD:-}" ]]; then
-  DB_APP_PASSWORD="$(openssl rand -base64 32 | tr -d '\n')"
-fi
+  if [[ -z "${DB_APP_PASSWORD:-}" ]]; then
+    DB_APP_PASSWORD="$(openssl rand -base64 32 | tr -d '\n')"
+  fi
 
-echo "Ensuring $DB_NAME and $DB_APP_USER exist on $RDS_ISOLATION_TIER RDS"
-DB_MASTER_PASSWORD="$DB_MASTER_PASSWORD" DB_APP_PASSWORD="$DB_APP_PASSWORD" \
-  "${SCRIPT_DIR}/bootstrap-rds-logical-db.sh" \
-  "$NAMESPACE" "$DB_HOST" "$DB_PORT" "$DB_MASTER_USER" "$DB_NAME" "$DB_APP_USER"
+  echo "Ensuring $DB_NAME and $DB_APP_USER exist on $RDS_ISOLATION_TIER RDS"
+  DB_MASTER_PASSWORD="$DB_MASTER_PASSWORD" DB_APP_PASSWORD="$DB_APP_PASSWORD" \
+    "${SCRIPT_DIR}/bootstrap-rds-logical-db.sh" \
+    "$NAMESPACE" "$DB_HOST" "$DB_PORT" "$DB_MASTER_USER" "$DB_NAME" "$DB_APP_USER"
 
-DATABASE_URL="postgresql+asyncpg://$(urlencode "$DB_APP_USER"):$(urlencode "$DB_APP_PASSWORD")@${DB_HOST}:${DB_PORT}/${DB_NAME}"
+  DATABASE_URL="postgresql+asyncpg://$(urlencode "$DB_APP_USER"):$(urlencode "$DB_APP_PASSWORD")@${DB_HOST}:${DB_PORT}/${DB_NAME}"
+else
+  echo "Reusing existing database connection for ${ENVIRONMENT}; Terraform state outputs were not required"
+fi
 
 jwt_dir="$(mktemp -d)"
 cleanup() {
