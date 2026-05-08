@@ -1,3 +1,11 @@
+## [1.2.1](https://github.com/manmohan659/nanochat/compare/v1.2.0...v1.2.1) (2026-05-08)
+
+
+### Bug Fixes
+
+* **devops:** preserve prod ingress values on release swap ([19cf557](https://github.com/manmohan659/nanochat/commit/19cf557ccfe0810d76e7a7175cb8f8815c13e214))
+* **inference:** stream demo fallback when upstream fails ([5c238c7](https://github.com/manmohan659/nanochat/commit/5c238c7a48051e1fab00beaf8bbd7617e26b058f))
+
 # [1.2.0](https://github.com/manmohan659/nanochat/compare/v1.1.7...v1.2.0) (2026-05-07)
 
 
