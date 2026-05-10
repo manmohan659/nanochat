@@ -3,6 +3,7 @@ name: Nightly QA Build
 on:
   schedule:
     - cron: '0 6 * * *'
+  workflow_dispatch:
 
 concurrency:
   group: nightly-qa
@@ -17,7 +18,7 @@ env:
   # QA runs in the shared non-prod cluster with its own namespace and logical DB.
   QA_CLUSTER: ${{ vars.QA_CLUSTER || 'samosachaat-dev-eks' }}
   QA_NAMESPACE: samosachaat-qa
-  IMAGE_TAG: qa-${{ github.sha }}
+  IMAGE_TAG: qa-${{ github.run_number }}-${{ github.sha }}
 
 jobs:
   build:
