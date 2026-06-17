@@ -16,7 +16,7 @@ WORKDIR /app
 COPY services/chat-api/pyproject.toml services/chat-api/README.md /app/
 
 RUN uv pip install --system --no-cache \
-      "fastapi>=0.117.1" \
+      "fastapi>=0.117.1,<0.118" \
       "uvicorn[standard]>=0.36.0" \
       "pydantic>=2.8.0" \
       "pydantic-settings>=2.4.0" \
