@@ -34,4 +34,4 @@ COPY db /app/db
 
 EXPOSE 8002
 
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8002", "--no-access-log"]
+CMD ["sh", "-c", "uvicorn src.main:app --host 0.0.0.0 --port ${PORT:-8002} --no-access-log"]
