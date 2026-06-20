@@ -5,7 +5,7 @@ description = "samosaChaat authentication service (OAuth2 + JWT)"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "fastapi>=0.117.1",
+    "fastapi>=0.117.1,<0.118",
     "uvicorn[standard]>=0.36.0",
     "pydantic>=2.8.0",
     "pydantic-settings>=2.4.0",

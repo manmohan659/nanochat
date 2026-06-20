@@ -16,7 +16,7 @@ WORKDIR /app
 COPY pyproject.toml README.md /app/
 
 RUN uv pip install --system --no-cache \
-      "fastapi>=0.117.1" \
+      "fastapi>=0.117.1,<0.118" \
       "uvicorn[standard]>=0.36.0" \
       "pydantic>=2.8.0" \
       "pydantic-settings>=2.4.0" \
@@ -37,4 +37,4 @@ COPY src /app/src
 
 EXPOSE 8001
 
-CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8001", "--no-access-log"]
+CMD ["sh", "-c", "uvicorn src.main:app --host 0.0.0.0 --port ${PORT:-8001} --no-access-log"]

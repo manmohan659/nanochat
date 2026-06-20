@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+
 function GoogleIcon() {
   return (
     <svg width={20} height={20} viewBox="0 0 48 48" aria-hidden="true">
@@ -25,21 +27,21 @@ function GitHubIcon() {
 export default function OAuthButtons() {
   return (
     <div className="space-y-3">
-      <a
+      <Link
         href="/auth/google"
         className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 transition-colors font-sans text-sm font-medium text-gray-700"
       >
         <GoogleIcon />
         <span>Continue with Google</span>
-      </a>
+      </Link>
 
-      <a
+      <Link
         href="/auth/github"
         className="w-full flex items-center justify-center gap-3 px-4 py-3 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 transition-colors font-sans text-sm font-medium text-gray-700"
       >
         <GitHubIcon />
         <span>Continue with GitHub</span>
-      </a>
+      </Link>
     </div>
   );
 }
