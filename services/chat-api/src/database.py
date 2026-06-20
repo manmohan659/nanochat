@@ -17,10 +17,21 @@ _engine = None
 _session_factory: async_sessionmaker[AsyncSession] | None = None
 
 
+def _normalize_async_database_url(database_url: str) -> str:
+    if database_url.startswith("postgresql://"):
+        return database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+    if database_url.startswith("postgres://"):
+        return database_url.replace("postgres://", "postgresql+asyncpg://", 1)
+    return database_url
+
+
 def _build_engine() -> None:
     global _engine, _session_factory
     settings = get_settings()
-    _engine = create_async_engine(settings.database_url, pool_pre_ping=True)
+    _engine = create_async_engine(
+        _normalize_async_database_url(settings.database_url),
+        pool_pre_ping=True,
+    )
     _session_factory = async_sessionmaker(_engine, expire_on_commit=False)
 
 

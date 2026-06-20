@@ -5,6 +5,7 @@ import json
 import random
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
+from urllib.parse import urlparse
 
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
@@ -182,8 +183,21 @@ async def demo_fallback_generate(request: GenerateRequest, reason: str) -> Async
     yield format_sse({"done": True})
 
 
+def normalize_upstream_generate_url(upstream_generate_url: str | None) -> str | None:
+    upstream_url = (upstream_generate_url or "").strip()
+    if not upstream_url:
+        return None
+
+    parsed = urlparse(upstream_url)
+    if parsed.hostname in {"inference", "inference.railway.internal"}:
+        return None
+
+    return upstream_url
+
+
 async def proxy_upstream_generate(request: GenerateRequest, settings: Settings) -> AsyncGenerator[str, None]:
-    if not settings.upstream_generate_url:
+    upstream_generate_url = normalize_upstream_generate_url(settings.upstream_generate_url)
+    if not upstream_generate_url:
         if settings.demo_fallback_enabled:
             async for chunk in demo_fallback_generate(request, "upstream_not_configured"):
                 yield chunk
@@ -199,7 +213,7 @@ async def proxy_upstream_generate(request: GenerateRequest, settings: Settings) 
         async with httpx.AsyncClient(timeout=timeout) as client:
             async with client.stream(
                 "POST",
-                settings.upstream_generate_url,
+                upstream_generate_url,
                 headers={"Content-Type": "application/json"},
                 json=payload,
             ) as response:
@@ -210,6 +224,10 @@ async def proxy_upstream_generate(request: GenerateRequest, settings: Settings) 
                         status_code=response.status_code,
                         body=body[:200].decode("utf-8", errors="replace"),
                     )
+                    if settings.demo_fallback_enabled:
+                        async for chunk in demo_fallback_generate(request, "upstream_generate_failed"):
+                            yield chunk
+                        return
                     yield format_sse({"error": "upstream_generate_failed"})
                     yield format_sse({"done": True})
                     return
@@ -359,7 +377,10 @@ def create_app(settings: Settings | None = None, runtime: InferenceRuntime | Non
         try:
             worker_pool = runtime.require_ready_pool()
         except HTTPException as exc:
-            if exc.status_code == status.HTTP_503_SERVICE_UNAVAILABLE and resolved_settings.upstream_generate_url:
+            if exc.status_code == status.HTTP_503_SERVICE_UNAVAILABLE and (
+                resolved_settings.upstream_generate_url
+                or resolved_settings.demo_fallback_enabled
+            ):
                 logger.warning("proxying_generate_to_upstream", reason=exc.detail)
                 return StreamingResponse(
                     proxy_upstream_generate(request_body, resolved_settings),
