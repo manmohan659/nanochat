@@ -73,6 +73,44 @@ class FailingAsyncClient:
         raise TimeoutError("upstream timed out")
 
 
+class FailingStatusResponse:
+    status_code = 404
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return None
+
+    async def aread(self):
+        return b'{"detail":"Not Found"}'
+
+
+class FailingStatusAsyncClient:
+    def __init__(self, *args, **kwargs):
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return None
+
+    def stream(self, method, url, *, headers, json):
+        return FailingStatusResponse()
+
+
+class UnexpectedAsyncClient:
+    def __init__(self, *args, **kwargs):
+        pass
+
+    async def __aenter__(self):
+        raise AssertionError("self-referential upstream should not be called")
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return None
+
+
 def test_generate_proxies_to_upstream_when_local_model_missing(monkeypatch):
     monkeypatch.setattr(main.httpx, "AsyncClient", FakeAsyncClient)
     settings = Settings(
@@ -123,4 +161,71 @@ def test_generate_uses_demo_fallback_when_upstream_fails(monkeypatch):
     assert '"gpu":"fallback"' in response.text
     assert '"token":"demo "' in response.text
     assert '"token":"fallback "' in response.text
+    assert 'data: {"done":true}' in response.text
+
+
+def test_generate_uses_demo_fallback_when_upstream_returns_error(monkeypatch):
+    monkeypatch.setattr(main.httpx, "AsyncClient", FailingStatusAsyncClient)
+    settings = Settings(
+        internal_api_key="test-key",
+        startup_load_enabled=False,
+        upstream_generate_url="https://example.test/generate",
+        demo_fallback_enabled=True,
+    )
+    app = main.create_app(settings=settings, runtime=NoModelRuntime())
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/generate",
+            headers={"X-Internal-API-Key": "test-key"},
+            json={"messages": [{"role": "user", "content": "hello"}]},
+        )
+
+    assert response.status_code == 200
+    assert '"gpu":"fallback"' in response.text
+    assert '"token":"demo "' in response.text
+    assert 'data: {"done":true}' in response.text
+
+
+def test_generate_uses_demo_fallback_without_upstream():
+    settings = Settings(
+        internal_api_key="test-key",
+        startup_load_enabled=False,
+        demo_fallback_enabled=True,
+    )
+    app = main.create_app(settings=settings, runtime=NoModelRuntime())
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/generate",
+            headers={"X-Internal-API-Key": "test-key"},
+            json={"messages": [{"role": "user", "content": "hello"}]},
+        )
+
+    assert response.status_code == 200
+    assert '"gpu":"fallback"' in response.text
+    assert '"token":"demo "' in response.text
+    assert 'data: {"done":true}' in response.text
+
+
+def test_generate_uses_demo_fallback_for_self_referential_upstream(monkeypatch):
+    monkeypatch.setattr(main.httpx, "AsyncClient", UnexpectedAsyncClient)
+    settings = Settings(
+        internal_api_key="test-key",
+        startup_load_enabled=False,
+        upstream_generate_url="http://inference:8003",
+        demo_fallback_enabled=True,
+    )
+    app = main.create_app(settings=settings, runtime=NoModelRuntime())
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/generate",
+            headers={"X-Internal-API-Key": "test-key"},
+            json={"messages": [{"role": "user", "content": "hello"}]},
+        )
+
+    assert response.status_code == 200
+    assert '"gpu":"fallback"' in response.text
+    assert '"token":"demo "' in response.text
     assert 'data: {"done":true}' in response.text
