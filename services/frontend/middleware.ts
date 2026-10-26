@@ -1,12 +1,22 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { maintenanceResponse, signinMaintenance } from '@/lib/signin-maintenance';
 
-export function middleware() {
-  // Auth is checked client-side via useAuth / localStorage.
-  // Middleware is intentionally a pass-through so the
-  // /chat?code=... PKCE code exchange can complete before API calls.
-  return NextResponse.next();
+export function middleware(request: NextRequest) {
+  if (!signinMaintenance()) return NextResponse.next();
+  if (request.nextUrl.pathname === '/chat') {
+    if (request.nextUrl.searchParams.has('access_token') || request.nextUrl.searchParams.has('code')) {
+      // Strip legacy/new callback material; do not log, echo, capture or redeem it.
+      const origin = process.env.APP_PUBLIC_ORIGIN;
+      if (!origin) return maintenanceResponse();
+      // A configured canonical origin avoids Host/proxy-header trust and internal host redirects.
+      const response = NextResponse.redirect(new URL('/signin-maintenance', origin), 303);
+      response.headers.set('Cache-Control', 'no-store');
+      response.headers.set('Referrer-Policy', 'no-referrer');
+      return response;
+    }
+    return NextResponse.next();
+  }
+  return maintenanceResponse();
 }
 
-export const config = {
-  matcher: [], // No server-side auth blocking
-};
+export const config = { matcher: ['/login', '/auth/google', '/auth/github', '/chat'] };

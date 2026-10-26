@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { signinMaintenance } from '@/lib/signin-maintenance';
 export const runtime = 'nodejs';
 const refreshCookie = 'samosachaat_refresh';
 const verifierCookie = 'samosachaat_login_verifier';
@@ -16,6 +17,7 @@ async function boundedJSON(body: ReadableStream<Uint8Array> | null, limit: numbe
 
 export async function POST(request: NextRequest, { params }: Context) {
   const { action } = await params;
+  if (action === 'exchange' && signinMaintenance()) return NextResponse.json({ error: 'Sign-in is briefly unavailable. Please try again shortly.' }, { status: 503, headers: { 'Cache-Control': 'no-store', 'Retry-After': '60' } });
   if (!['exchange', 'refresh', 'logout'].includes(action)) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   // Browser requests must be same-origin; reject cross-site form/credential requests.
   const origin = request.headers.get('origin');

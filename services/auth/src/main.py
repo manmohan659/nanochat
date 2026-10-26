@@ -50,6 +50,11 @@ def create_app() -> FastAPI:
 
     @app.middleware("http")
     async def request_context(request: Request, call_next) -> Response:
+        if settings.signin_maintenance and request.url.path in {
+            "/auth/google", "/auth/github", "/auth/google/callback", "/auth/github/callback",
+        }:
+            # Stop before provider calls or request logging; never echo callback query data.
+            return JSONResponse(status_code=503, content={"detail": "Sign-in is briefly unavailable. Please try again shortly."}, headers={"Retry-After": "60", "Cache-Control": "no-store", "Referrer-Policy": "no-referrer"})
         if request.url.path == "/metrics" and (not settings.internal_api_key or not secrets.compare_digest(request.headers.get("x-internal-api-key", ""), settings.internal_api_key)):
             return JSONResponse(status_code=404, content={"detail": "Not found"})
         incoming = request.headers.get("x-trace-id") or request.headers.get("x-request-id")
