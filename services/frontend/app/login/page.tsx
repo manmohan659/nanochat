@@ -9,9 +9,16 @@ import OAuthButtons from '@/components/login/OAuthButtons';
 import SamosaLogo from '@/components/svg/SamosaLogo';
 
 function LoginContent() {
-  const { authenticated, loading } = useAuth();
+  const { authenticated, loading, error, retry } = useAuth();
 
-  if (loading) return null;
+  if (loading || error) return (
+    <main className="flex min-h-dvh items-center justify-center p-6 text-center">
+      <div role="status" aria-live="polite">
+        <p>{loading ? 'Checking your session…' : 'We could not check your session. Please try again.'}</p>
+        {error && <button className="mt-4 rounded border px-4 py-2" onClick={retry}>Try again</button>}
+      </div>
+    </main>
+  );
   if (authenticated) {
     redirect('/chat');
     return null;

@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from 'react';
+import { sessionJSON } from '@/lib/session-request';
 import { useRouter } from 'next/navigation';
 import { getToken, setToken, clearToken, getUser, refreshAccessToken, logoutSession, authGeneration, type TokenUser } from '@/lib/auth-client';
 
@@ -17,30 +18,32 @@ async function initialize(): Promise<boolean> {
       if (started !== authGeneration()) return false;
       setToken(token); return true;
     }
-    const response = await fetch('/api/auth/exchange', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(code ? { code } : {}), cache: 'no-store' });
-    if (!response.ok) { clearToken(); return false; }
-    const data = await response.json();
+    const data = await sessionJSON('/api/auth/exchange', { code });
+    if (!data) { clearToken(); return false; }
     if (typeof data.access_token !== 'string') return false;
     if (started !== authGeneration()) return false;
     setToken(data.access_token);
     return true;
-  })().catch(() => false).finally(() => { initializing = null; });
+  })().finally(() => { initializing = null; });
   return initializing;
 }
 
 export function useAuth() {
+  const [error, setError] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const [authenticated, setAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<TokenUser | null>(null);
   const router = useRouter();
   useEffect(() => {
     let active = true;
-    initialize().then(ok => { if (active) { setAuthenticated(ok); setUser(getUser()); setLoading(false); } });
+    setLoading(true); setError(false);
+    initialize().then(ok => { if (active) { setAuthenticated(ok); setUser(getUser()); setLoading(false); } }).catch(() => { if (active) { setError(true); setLoading(false); } });
     return () => { active = false; };
-  }, []);
+  }, [attempt]);
   const logout = async () => {
     await logoutSession().catch(() => undefined);
     clearToken(); setAuthenticated(false); setUser(null); router.push('/');
   };
-  return { authenticated, loading, user, logout };
+  return { authenticated, loading, user, logout, error, retry: () => setAttempt(value => value + 1) };
 }
