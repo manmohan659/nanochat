@@ -52,6 +52,7 @@ def _test_environment():
 async def session_factory() -> AsyncIterator[async_sessionmaker[AsyncSession]]:
     from src.database import Base, override_session_factory
     from src.models.user import User  # noqa: F401 — register on Base
+    from src.models.session import LoginCode, RefreshCredential  # noqa: F401
 
     engine = create_async_engine(
         f"sqlite+aiosqlite:///file:test_{uuid.uuid4().hex}?mode=memory&cache=shared&uri=true",
@@ -82,3 +83,10 @@ async def client(session_factory) -> AsyncIterator[AsyncClient]:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://testserver") as ac:
         yield ac
+
+@pytest.fixture(autouse=True)
+def reset_rate_limiter():
+    from src.rate_limit import limiter
+    limiter.reset()
+    yield
+    limiter.reset()

@@ -20,7 +20,9 @@ async def upsert_from_oauth(session: AsyncSession, profile: OAuthProfile) -> Use
     existing = (await session.execute(stmt)).scalar_one_or_none()
     if existing is None:
         email_stmt = select(User).where(User.email == profile.email)
-        existing = (await session.execute(email_stmt)).scalar_one_or_none()
+        collision = (await session.execute(email_stmt)).scalar_one_or_none()
+        if collision is not None:
+            raise ValueError("explicit authenticated account linking required")
 
     now = datetime.now(timezone.utc)
     if existing is None:
