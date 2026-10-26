@@ -37,6 +37,8 @@ class Settings(BaseSettings):
     cookie_secure: bool = Field(default=False)
     cookie_domain: str | None = Field(default=None)
 
+    signin_maintenance: bool = Field(default=False)
+
     log_level: str = Field(default="INFO")
 
     @property

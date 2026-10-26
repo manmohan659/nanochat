@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { maintenanceResponse, signinMaintenance } from '@/lib/signin-maintenance';
 
 export const runtime = 'nodejs';
 
@@ -17,6 +18,7 @@ function authPublicBaseUrl(): string | null {
 }
 
 export async function GET(_request: Request, { params }: RouteContext) {
+  if (signinMaintenance()) return maintenanceResponse();
   const { provider } = await params;
   if (!providers.has(provider)) {
     return NextResponse.json({ error: 'unknown auth provider' }, { status: 404 });
