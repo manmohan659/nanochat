@@ -6,16 +6,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-RUN pip install --no-cache-dir \
-      "fastapi>=0.117.1,<0.118" \
-      "uvicorn[standard]>=0.36.0" \
-      "pydantic-settings>=2.4.0" \
-      "httpx>=0.27.0" \
-      "structlog>=24.4.0" \
-      "prometheus-fastapi-instrumentator>=7.0.0" \
-      "huggingface-hub>=0.35.0" \
-      "filelock>=3.18.0" \
-      "requests>=2.32.0"
+RUN pip install --no-cache-dir uv==0.9.15
+COPY requirements.railway.lock /app/requirements.railway.lock
+RUN uv pip install --system --no-cache --require-hashes --only-binary :all: -r /app/requirements.railway.lock
 
 COPY src /app/src
 
