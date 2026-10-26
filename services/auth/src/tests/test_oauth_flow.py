@@ -4,6 +4,9 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 import pytest
+from fastapi.responses import RedirectResponse
+from urllib.parse import urlparse, parse_qs
+from src.services.session_store import pkce_challenge
 
 from src.services import user_service
 from src.services.google_oauth import OAuthProfile
@@ -14,6 +17,9 @@ class _MockGoogleClient:
 
     def __init__(self, userinfo):
         self._userinfo = userinfo
+
+    async def authorize_redirect(self, request, redirect_uri):
+        return RedirectResponse("https://provider.example.invalid/authorize")
 
     async def authorize_access_token(self, request):
         return {"access_token": "fake", "userinfo": self._userinfo}
@@ -34,14 +40,20 @@ async def test_google_callback_creates_user_and_sets_refresh_cookie(client, db_s
     app = client._transport.app  # type: ignore[attr-defined]
     app.state.google_oauth = SimpleNamespace(google=_MockGoogleClient(userinfo))
 
+    await client.get("/auth/google", params={"code_challenge": pkce_challenge("v" * 43)}, follow_redirects=False)
     resp = await client.get("/auth/google/callback", follow_redirects=False)
     assert resp.status_code == 302
-    assert "access_token=" in resp.headers["location"]
+    assert "access_token=" not in resp.headers["location"]
+    code = parse_qs(urlparse(resp.headers["location"]).query)["code"][0]
+    exchange = await client.post("/auth/exchange", json={"code": code, "verifier": "v" * 43}, headers={"X-Internal-API-Key": "test-internal-key"})
+    assert exchange.status_code == 200
+    assert exchange.json()["access_token"]
+    assert exchange.json()["refresh_token"]
 
     from src.config import get_settings
 
     cookie_name = get_settings().refresh_cookie_name
-    assert cookie_name in resp.cookies
+    assert cookie_name not in resp.cookies
 
     # Verify user was persisted.
     from sqlalchemy import select
@@ -83,6 +95,7 @@ async def test_google_callback_updates_existing(client, db_session):
     app = client._transport.app  # type: ignore[attr-defined]
     app.state.google_oauth = SimpleNamespace(google=_MockGoogleClient(userinfo))
 
+    await client.get("/auth/google", params={"code_challenge": pkce_challenge("v" * 43)}, follow_redirects=False)
     resp = await client.get("/auth/google/callback", follow_redirects=False)
     assert resp.status_code == 302
 

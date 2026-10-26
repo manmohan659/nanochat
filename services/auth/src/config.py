@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     jwt_private_key: str = Field(default="")
     jwt_public_key: str = Field(default="")
     jwt_issuer: str = Field(default="samosachaat-auth")
-    jwt_access_ttl_seconds: int = Field(default=3600)
+    jwt_access_ttl_seconds: int = Field(default=900)
     jwt_refresh_ttl_seconds: int = Field(default=7 * 24 * 3600)
 
     frontend_url: str = Field(default="http://localhost:3000")

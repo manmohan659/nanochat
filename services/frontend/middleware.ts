@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 export function middleware() {
   // Auth is checked client-side via useAuth / localStorage.
   // Middleware is intentionally a pass-through so the
-  // /chat?access_token=... redirect from the auth service works.
+  // /chat?code=... PKCE code exchange can complete before API calls.
   return NextResponse.next();
 }
 

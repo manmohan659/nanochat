@@ -1,5 +1,15 @@
-const TOKEN_KEY = 'samosachaat_access_token';
-const USER_KEY = 'samosachaat_user';
+let generation = 0;
+const sessionChannel = typeof window !== 'undefined' && typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('samosachaat-session') : null;
+if (sessionChannel) sessionChannel.onmessage = event => {
+  if (event.data === 'logout') {
+    clearToken();
+    if (['/chat', '/dashboard'].includes(window.location.pathname)) window.location.assign('/login');
+  }
+};
+export function authGeneration(): number { return generation; }
+let memoryToken: string | null = null;
+let memoryUser: TokenUser | null = null;
+let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 const SESSION_TRACE_KEY = 'samosachaat_session_trace_id';
 
 export interface TokenUser {
@@ -9,27 +19,43 @@ export interface TokenUser {
 
 export function getToken(): string | null {
   if (typeof window === 'undefined') return null;
-  return localStorage.getItem(TOKEN_KEY);
+  return memoryToken;
 }
 
 export function setToken(token: string): void {
-  localStorage.setItem(TOKEN_KEY, token);
+  memoryToken = token;
+  // Remove legacy persistent bearer storage on upgrade.
+  try { localStorage.removeItem('samosachaat_access_token'); localStorage.removeItem('samosachaat_user'); } catch { /* legacy storage may be blocked; tokens now live only in memory */ }
+  if (refreshTimer) clearTimeout(refreshTimer);
   // Decode JWT payload to persist basic user info
   try {
-    const payload = JSON.parse(atob(token.split('.')[1]));
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')));
     const user: TokenUser = {
       name: payload.name || payload.email || 'User',
       email: payload.email || '',
     };
-    localStorage.setItem(USER_KEY, JSON.stringify(user));
+    memoryUser = user;
+    const delay = Math.max(1000, (Number(payload.exp) * 1000 - Date.now()) - 60000);
+    if (Number.isFinite(delay)) refreshTimer = setTimeout(async () => {
+      const started = generation;
+      try {
+        const nextToken = await refreshAccessToken();
+        if (started !== generation) return;
+        if (!nextToken) { clearToken(); window.location.assign('/login'); return; }
+        setToken(nextToken);
+      } catch { if (started === generation) { clearToken(); window.location.assign('/login'); } }
+    }, delay);
   } catch {
     /* malformed JWT — ignore */
   }
 }
 
 export function clearToken(): void {
-  localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem(USER_KEY);
+  generation += 1;
+  memoryToken = null; memoryUser = null;
+  if (refreshTimer) clearTimeout(refreshTimer);
+  refreshTimer = null;
+  try { localStorage.removeItem('samosachaat_access_token'); localStorage.removeItem('samosachaat_user'); } catch { /* legacy storage may be blocked; tokens now live only in memory */ }
 }
 
 export function isAuthenticated(): boolean {
@@ -38,12 +64,7 @@ export function isAuthenticated(): boolean {
 
 export function getUser(): TokenUser | null {
   if (typeof window === 'undefined') return null;
-  try {
-    const raw = localStorage.getItem(USER_KEY);
-    return raw ? (JSON.parse(raw) as TokenUser) : null;
-  } catch {
-    return null;
-  }
+  return memoryUser;
 }
 
 function newSessionTraceId(): string {
@@ -76,4 +97,23 @@ export function authHeaders(): Record<string, string> {
   const token = getToken();
   if (token) headers.Authorization = `Bearer ${token}`;
   return headers;
+}
+
+export async function refreshAccessToken(): Promise<string | null> {
+  const refresh = async () => {
+    const response = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'same-origin', cache: 'no-store' });
+    if (!response.ok) return null;
+    const data = await response.json();
+    return typeof data.access_token === 'string' ? data.access_token : null;
+  };
+  return navigator.locks ? navigator.locks.request('samosachaat-refresh', refresh) : refresh();
+}
+
+export async function logoutSession(): Promise<void> {
+  const logout = async () => {
+    try { await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }); }
+    finally { clearToken(); sessionChannel?.postMessage('logout'); }
+  };
+  if (navigator.locks) await navigator.locks.request('samosachaat-refresh', logout);
+  else await logout();
 }

@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { randomBytes, createHash } from 'node:crypto';
 
 export const runtime = 'nodejs';
 
@@ -30,5 +31,10 @@ export async function GET(_request: Request, { params }: RouteContext) {
     );
   }
 
-  return NextResponse.redirect(`${authBaseUrl}/auth/${provider}`);
+  const verifier = randomBytes(32).toString('base64url');
+  const challenge = createHash('sha256').update(verifier).digest('base64url');
+  const response = NextResponse.redirect(`${authBaseUrl}/auth/${provider}?code_challenge=${challenge}`);
+  response.cookies.set('samosachaat_login_verifier', verifier, { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax', path: '/', maxAge: 600 });
+  response.headers.set('Cache-Control', 'no-store');
+  return response;
 }

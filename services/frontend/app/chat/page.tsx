@@ -1,13 +1,12 @@
 'use client';
 
 import { Suspense } from 'react';
-import { useAuth, useTokenCapture } from '@/hooks/useAuth';
+import { useAuth } from '@/hooks/useAuth';
 import Sidebar from '@/components/chat/Sidebar';
 import ChatWindow from '@/components/chat/ChatWindow';
 import { redirect } from 'next/navigation';
 
 function ChatContent() {
-  useTokenCapture();
   const { authenticated, loading } = useAuth();
 
   if (loading) {

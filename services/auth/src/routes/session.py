@@ -1,57 +1,56 @@
 """Session/token refresh routes + internal JWT validation."""
-from __future__ import annotations
+import secrets
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
 from ..database import get_session
 from ..logging_setup import set_user_id
 from ..rate_limit import limiter
-from ..services import user_service
+from ..services import user_service, session_store
 from ..services.jwt_service import JWTError, JWTService
 
 router = APIRouter(prefix="/auth", tags=["session"])
 
 
-class RefreshResponse(BaseModel):
-    access_token: str
-    expires_in: int
+class ExchangeRequest(BaseModel):
+    code: str = Field(min_length=40, max_length=128)
+    verifier: str = Field(min_length=43, max_length=128, pattern=r"^[A-Za-z0-9_-]+$")
 
+class RefreshRequest(BaseModel):
+    token: str = Field(min_length=1, max_length=8192)
 
 class ValidateRequest(BaseModel):
     token: str
 
+def require_internal(x_internal_api_key: str | None = Header(default=None, alias="X-Internal-API-Key")):
+    expected = get_settings().internal_api_key
+    if not expected or not secrets.compare_digest(x_internal_api_key or "", expected):
+        raise HTTPException(403, "invalid internal api key")
 
-@router.post("/refresh", response_model=RefreshResponse)
+@router.post("/exchange", dependencies=[Depends(require_internal)])
 @limiter.limit("30/minute")
-async def refresh(
-    request: Request,
-    session: AsyncSession = Depends(get_session),
-):
-    settings = get_settings()
-    cookie = request.cookies.get(settings.refresh_cookie_name)
-    if not cookie:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "missing refresh cookie")
-
-    jwt_service = JWTService()
+async def exchange(request: Request, payload: ExchangeRequest, session: AsyncSession = Depends(get_session)):
     try:
-        payload = jwt_service.decode(cookie, expected_type="refresh")
-    except JWTError as exc:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(exc)) from exc
+        return await session_store.exchange(session, payload.code, payload.verifier)
+    except session_store.SessionRejected:
+        raise HTTPException(401, "Login expired; restart sign-in") from None
 
-    user = await user_service.get_by_id(session, payload["sub"])
-    if user is None:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "user not found")
-    set_user_id(str(user.id))
-    request.state.user_id = str(user.id)
+@router.post("/refresh", dependencies=[Depends(require_internal)])
+@limiter.limit("30/minute")
+async def refresh(request: Request, payload: RefreshRequest, session: AsyncSession = Depends(get_session)):
+    try:
+        return await session_store.rotate(session, payload.token)
+    except session_store.SessionRejected:
+        raise HTTPException(401, "Session expired; sign in again") from None
 
-    access, ttl = jwt_service.issue_access_token(
-        user_id=str(user.id), email=user.email, name=user.name
-    )
-    return RefreshResponse(access_token=access, expires_in=ttl)
+@router.post("/logout", dependencies=[Depends(require_internal)])
+async def logout(payload: RefreshRequest, session: AsyncSession = Depends(get_session)):
+    await session_store.revoke(session, payload.token)
+    return {"ok": True}
 
 
 @router.post("/validate")
@@ -62,7 +61,7 @@ async def validate(
     x_internal_api_key: str | None = Header(default=None, alias="X-Internal-API-Key"),
 ):
     settings = get_settings()
-    if not settings.internal_api_key or x_internal_api_key != settings.internal_api_key:
+    if not settings.internal_api_key or not secrets.compare_digest(x_internal_api_key or "", settings.internal_api_key):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "invalid internal api key")
 
     jwt_service = JWTService()

@@ -1,5 +1,7 @@
 """OAuth start/callback routes for Google and GitHub."""
 from __future__ import annotations
+import re
+from urllib.parse import urlencode
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
@@ -11,24 +13,24 @@ from ..logging_setup import set_user_id
 from ..rate_limit import limiter
 from ..services import github_oauth as github_provider
 from ..services import google_oauth as google_provider
-from ..services import user_service
-from ..services.jwt_service import JWTService
+from ..services import user_service, session_store
 
 router = APIRouter(prefix="/auth", tags=["oauth"])
 
 
-def _set_refresh_cookie(response: RedirectResponse, token: str, max_age: int) -> None:
+def _save_challenge(request: Request) -> None:
+    challenge = request.query_params.get("code_challenge", "")
+    if not re.fullmatch(r"[A-Za-z0-9_-]{43}", challenge):
+        raise HTTPException(400, "Restart sign-in from the application")
+    request.session["login_challenge"] = challenge
+
+async def _finish_login(request: Request, session: AsyncSession, user):
+    challenge = request.session.pop("login_challenge", None)
+    if not challenge:
+        raise HTTPException(400, "Restart sign-in from the application")
+    code = await session_store.issue_code(session, user.id, challenge)
     settings = get_settings()
-    response.set_cookie(
-        key=settings.refresh_cookie_name,
-        value=token,
-        max_age=max_age,
-        httponly=True,
-        secure=settings.cookie_secure,
-        samesite="lax",
-        domain=settings.cookie_domain,
-        path="/",
-    )
+    return RedirectResponse(f"{settings.frontend_url.rstrip('/')}/chat?{urlencode({'code': code})}", status_code=302)
 
 
 def _google_oauth(request: Request):
@@ -50,6 +52,7 @@ def _github_oauth(request: Request):
 @router.get("/google")
 @limiter.limit("10/minute")
 async def google_start(request: Request):
+    _save_challenge(request)
     settings = get_settings()
     redirect_uri = f"{settings.auth_base_url.rstrip('/')}/auth/google/callback"
     return await _google_oauth(request).authorize_redirect(request, redirect_uri)
@@ -78,21 +81,13 @@ async def google_callback(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Unable to link OAuth identity") from exc
     set_user_id(str(user.id))
 
-    jwt_service = JWTService()
-    pair = jwt_service.issue_pair(user_id=str(user.id), email=user.email, name=user.name)
-
-    settings = get_settings()
-    redirect = RedirectResponse(
-        url=f"{settings.frontend_url.rstrip('/')}/chat?access_token={pair.access_token}",
-        status_code=status.HTTP_302_FOUND,
-    )
-    _set_refresh_cookie(redirect, pair.refresh_token, pair.refresh_expires_in)
-    return redirect
+    return await _finish_login(request, session, user)
 
 
 @router.get("/github")
 @limiter.limit("10/minute")
 async def github_start(request: Request):
+    _save_challenge(request)
     settings = get_settings()
     redirect_uri = f"{settings.auth_base_url.rstrip('/')}/auth/github/callback"
     return await _github_oauth(request).authorize_redirect(request, redirect_uri)
@@ -126,13 +121,4 @@ async def github_callback(
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "Unable to link OAuth identity") from exc
     set_user_id(str(user.id))
 
-    jwt_service = JWTService()
-    pair = jwt_service.issue_pair(user_id=str(user.id), email=user.email, name=user.name)
-
-    settings = get_settings()
-    redirect = RedirectResponse(
-        url=f"{settings.frontend_url.rstrip('/')}/chat?access_token={pair.access_token}",
-        status_code=status.HTTP_302_FOUND,
-    )
-    _set_refresh_cookie(redirect, pair.refresh_token, pair.refresh_expires_in)
-    return redirect
+    return await _finish_login(request, session, user)

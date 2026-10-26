@@ -1,6 +1,6 @@
 """RS256 JWT issuance + validation.
 
-Access tokens (1h) are returned to the client for Bearer auth.
+Access tokens (15 minutes by default) are returned to the client for Bearer auth.
 Refresh tokens (7d) are stored in an httpOnly cookie.
 """
 from __future__ import annotations
