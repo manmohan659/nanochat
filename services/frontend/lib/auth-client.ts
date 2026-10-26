@@ -108,7 +108,7 @@ export async function refreshAccessToken(): Promise<string | null> {
 }
 
 export async function logoutSession(): Promise<void> {
-  try {
-    await withSessionLock(async () => { await sessionJSON('/api/auth/logout'); });
-  } finally { clearToken(); sessionChannel?.postMessage('logout'); }
+  // Do not claim logout or erase local state until the server has confirmed it.
+  await withSessionLock(async () => { await sessionJSON('/api/auth/logout'); });
+  clearToken(); sessionChannel?.postMessage('logout');
 }

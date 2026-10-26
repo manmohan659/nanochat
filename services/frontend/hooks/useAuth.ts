@@ -29,6 +29,8 @@ async function initialize(): Promise<boolean> {
 }
 
 export function useAuth() {
+  const [logoutError, setLogoutError] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
   const [error, setError] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [authenticated, setAuthenticated] = useState(false);
@@ -42,8 +44,13 @@ export function useAuth() {
     return () => { active = false; };
   }, [attempt]);
   const logout = async () => {
-    await logoutSession().catch(() => undefined);
-    clearToken(); setAuthenticated(false); setUser(null); router.push('/');
+    setLoggingOut(true); setLogoutError(false);
+    try {
+      await logoutSession();
+      clearToken(); setAuthenticated(false); setUser(null); router.push('/');
+    } catch {
+      setLogoutError(true);
+    } finally { setLoggingOut(false); }
   };
-  return { authenticated, loading, user, logout, error, retry: () => setAttempt(value => value + 1) };
+  return { authenticated, loading, user, logout, loggingOut, logoutError, error, retry: () => setAttempt(value => value + 1) };
 }

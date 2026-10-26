@@ -25,7 +25,7 @@ function isMobileViewport() {
 }
 
 export default function Sidebar() {
-  const { user, logout } = useAuth();
+  const { user, logout, loggingOut, logoutError } = useAuth();
   const { theme, toggle } = useTheme();
   const {
     conversations,
@@ -245,15 +245,16 @@ export default function Sidebar() {
                   <button
                     type="button"
                     role="menuitem"
+                    disabled={loggingOut}
                     onClick={() => {
-                      setMenuOpen(false);
-                      logout();
+                      void logout();
                     }}
                     className="w-full flex items-center gap-2 px-3 py-2.5 text-sm text-chutney-red hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors"
                   >
                     <LogOut size={16} />
-                    <span>Log out</span>
+                    <span>{loggingOut ? 'Logging out…' : 'Log out'}</span>
                   </button>
+                  {logoutError && <p role="alert" className="px-3 py-2 text-sm text-chutney-red">Logout was not confirmed. You may still be signed in. Please try again.</p>}
                 </div>
               )}
             </div>
