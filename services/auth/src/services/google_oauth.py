@@ -41,6 +41,8 @@ def profile_from_userinfo(userinfo: dict[str, Any]) -> OAuthProfile:
     email = userinfo.get("email")
     if not provider_id or not email:
         raise ValueError("google userinfo missing sub/email")
+    if userinfo.get("email_verified") is not True:
+        raise ValueError("google userinfo email is not verified")
     return OAuthProfile(
         provider="google",
         provider_id=str(provider_id),

@@ -13,21 +13,8 @@ RUN pip install --no-cache-dir uv==0.4.30
 
 WORKDIR /app
 
-COPY services/chat-api/pyproject.toml services/chat-api/README.md /app/
-
-RUN uv pip install --system --no-cache \
-      "fastapi>=0.117.1,<0.118" \
-      "uvicorn[standard]>=0.36.0" \
-      "pydantic>=2.8.0" \
-      "pydantic-settings>=2.4.0" \
-      "sqlalchemy[asyncio]>=2.0.36" \
-      "asyncpg>=0.29.0" \
-      "alembic>=1.13.0" \
-      "httpx>=0.27.0" \
-      "sse-starlette>=2.1.3" \
-      "structlog>=24.4.0" \
-      "cachetools>=5.5.0" \
-      "prometheus-fastapi-instrumentator>=7.0.0"
+COPY services/chat-api/requirements.lock /app/requirements.lock
+RUN uv pip install --system --no-cache --require-hashes --only-binary :all: -r /app/requirements.lock
 
 COPY services/chat-api/src /app/src
 COPY db /app/db

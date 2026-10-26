@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from fastapi import FastAPI, Request, Response
+import secrets
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from prometheus_fastapi_instrumentator import Instrumentator
@@ -30,14 +31,14 @@ def create_app() -> FastAPI:
     configure_logging()
     settings = get_settings()
     logger = get_logger(__name__)
-    app = FastAPI(title="samosaChaat Auth", version="0.1.0")
+    app = FastAPI(title="samosaChaat Auth", version="0.1.0", docs_url=None, redoc_url=None, openapi_url=None)
 
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_handler)
     app.add_middleware(SlowAPIMiddleware)
 
     # SessionMiddleware is required by authlib for the OAuth state cookie.
-    app.add_middleware(SessionMiddleware, secret_key=settings.session_secret)
+    app.add_middleware(SessionMiddleware, secret_key=settings.session_secret, https_only=settings.cookie_secure, same_site="lax")
 
     app.add_middleware(
         CORSMiddleware,
@@ -49,6 +50,8 @@ def create_app() -> FastAPI:
 
     @app.middleware("http")
     async def request_context(request: Request, call_next) -> Response:
+        if request.url.path == "/metrics" and (not settings.internal_api_key or not secrets.compare_digest(request.headers.get("x-internal-api-key", ""), settings.internal_api_key)):
+            return JSONResponse(status_code=404, content={"detail": "Not found"})
         incoming = request.headers.get("x-trace-id") or request.headers.get("x-request-id")
         trace_id = incoming or new_trace_id()
         session_trace_id = request.headers.get("x-session-trace-id")
@@ -63,6 +66,12 @@ def create_app() -> FastAPI:
             logger.exception("request_failed", method=request.method, path=request.url.path)
             raise
         response.headers["x-trace-id"] = trace_id
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["Cache-Control"] = "no-store"
+        if settings.cookie_secure:
+            response.headers["Strict-Transport-Security"] = "max-age=31536000"
         if session_trace_id:
             response.headers["x-session-trace-id"] = session_trace_id
         user_id = getattr(request.state, "user_id", None)

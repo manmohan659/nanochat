@@ -27,6 +27,7 @@ async def test_google_callback_creates_user_and_sets_refresh_cookie(client, db_s
     userinfo = {
         "sub": "google-42",
         "email": "new@user.co",
+        "email_verified": True,
         "name": "New User",
         "picture": "https://img/new.png",
     }
@@ -75,6 +76,7 @@ async def test_google_callback_updates_existing(client, db_session):
     userinfo = {
         "sub": "google-99",
         "email": "old@user.co",
+        "email_verified": True,
         "name": "Updated Name",
         "picture": "https://img/u.png",
     }

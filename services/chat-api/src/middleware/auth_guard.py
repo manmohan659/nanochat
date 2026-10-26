@@ -7,6 +7,7 @@ the auth service on every call.
 from __future__ import annotations
 
 import asyncio
+import time
 from dataclasses import dataclass
 from typing import Annotated, Any
 
@@ -20,12 +21,20 @@ from ..logging_setup import get_logger, get_session_trace_id, get_trace_id, set_
 logger = get_logger(__name__)
 
 
+def _validated_expiry(value: Any) -> float | None:
+    # Only claims from the trusted auth validation response reach this function.
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    return None
+
+
 @dataclass
 class AuthenticatedUser:
     id: str
     email: str
     name: str | None
     raw: dict[str, Any]
+    expires_at: float | None = None
 
     @classmethod
     def from_validate_response(cls, payload: dict[str, Any]) -> "AuthenticatedUser":
@@ -35,6 +44,7 @@ class AuthenticatedUser:
             email=user.get("email", ""),
             name=user.get("name"),
             raw=user,
+            expires_at=_validated_expiry(payload.get("claims", {}).get("exp")),
         )
 
 
@@ -49,11 +59,16 @@ class AuthCache:
 
     async def get(self, token: str) -> AuthenticatedUser | None:
         async with self._lock:
-            return self._cache.get(token)
+            user = self._cache.get(token)
+            if user is not None and (user.expires_at is None or user.expires_at <= time.time()):
+                self._cache.pop(token, None)
+                return None
+            return user
 
     async def set(self, token: str, user: AuthenticatedUser) -> None:
         async with self._lock:
-            self._cache[token] = user
+            if user.expires_at is not None and user.expires_at > time.time():
+                self._cache[token] = user
 
     async def clear(self) -> None:
         async with self._lock:

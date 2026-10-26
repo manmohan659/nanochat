@@ -69,14 +69,11 @@ async def test_upsert_links_existing_user_by_email(db_session):
     )
 
     u1 = await user_service.upsert_from_oauth(db_session, google)
-    u2 = await user_service.upsert_from_oauth(db_session, github)
-
-    assert u2.id == u1.id
-    assert u2.email == "alice@example.com"
-    assert u2.provider == "github"
-    assert u2.provider_id == "gh-98765"
-    assert u2.name == "Alice GH"
-    assert u2.avatar_url == "https://img/gh.png"
+    with pytest.raises(ValueError, match="explicit authenticated"):
+        await user_service.upsert_from_oauth(db_session, github)
+    await db_session.refresh(u1)
+    assert u1.provider == "google"
+    assert u1.provider_id == "g-12345"
 
 
 @pytest.mark.asyncio

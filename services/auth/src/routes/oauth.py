@@ -65,14 +65,17 @@ async def google_callback(
     try:
         token = await oauth.authorize_access_token(request)
     except Exception as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"google oauth failed: {exc}") from exc
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "google oauth failed") from exc
 
     userinfo = token.get("userinfo")
     if not userinfo:
         userinfo = await oauth.userinfo(token=token)
 
-    profile = google_provider.profile_from_userinfo(dict(userinfo))
-    user = await user_service.upsert_from_oauth(session, profile)
+    try:
+        profile = google_provider.profile_from_userinfo(dict(userinfo))
+        user = await user_service.upsert_from_oauth(session, profile)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Unable to link OAuth identity") from exc
     set_user_id(str(user.id))
 
     jwt_service = JWTService()
@@ -105,20 +108,22 @@ async def github_callback(
     try:
         token = await oauth.authorize_access_token(request)
     except Exception as exc:
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"github oauth failed: {exc}") from exc
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "github oauth failed") from exc
 
     user_resp = await oauth.get("user", token=token)
     user_resp.raise_for_status()
     userinfo = user_resp.json()
 
     emails: list[dict] | None = None
-    if not userinfo.get("email"):
-        emails_resp = await oauth.get("user/emails", token=token)
-        if emails_resp.status_code == 200:
-            emails = emails_resp.json()
+    emails_resp = await oauth.get("user/emails", token=token)
+    if emails_resp.status_code == 200:
+        emails = emails_resp.json()
 
-    profile = github_provider.profile_from_userinfo(dict(userinfo), emails)
-    user = await user_service.upsert_from_oauth(session, profile)
+    try:
+        profile = github_provider.profile_from_userinfo(dict(userinfo), emails)
+        user = await user_service.upsert_from_oauth(session, profile)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Unable to link OAuth identity") from exc
     set_user_id(str(user.id))
 
     jwt_service = JWTService()

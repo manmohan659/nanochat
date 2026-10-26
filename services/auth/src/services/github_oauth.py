@@ -39,11 +39,8 @@ def profile_from_userinfo(userinfo: dict[str, Any], emails: list[dict[str, Any]]
     if provider_id is None:
         raise ValueError("github userinfo missing id")
 
-    email = userinfo.get("email")
-    if not email and emails:
-        primary = next((e for e in emails if e.get("primary") and e.get("verified")), None)
-        if primary:
-            email = primary.get("email")
+    primary = next((e for e in (emails or []) if e.get("primary") is True and e.get("verified") is True), None)
+    email = primary.get("email") if primary else None
     if not email:
         raise ValueError("github userinfo missing verified email")
 
