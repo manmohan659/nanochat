@@ -190,6 +190,26 @@ jobs:
       - name: Run pytest
         run: uv run pytest
 
+  test-inference-railway:
+    name: Inference Railway CPU runtime — pytest
+    needs: changes
+    if: needs.changes.outputs.inference == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/inference
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: astral-sh/setup-uv@v4
+      - run: uv venv
+      - run: |
+          uv pip install --require-hashes --only-binary :all: -r requirements.railway.lock
+      - run: uv pip install pytest==9.1.1 pytest-asyncio==1.4.0
+      - run: .venv/bin/python -m pytest tests -q
+
   terraform-validate:
     name: Terraform — validate
     needs: changes
@@ -274,6 +294,9 @@ jobs:
           - service: inference
             context: services/inference
             dockerfile: services/inference/Dockerfile
+          - service: inference-railway
+            context: services/inference
+            dockerfile: services/inference/Dockerfile.railway
     steps:
       - uses: actions/checkout@v4
 
