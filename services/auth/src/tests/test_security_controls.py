@@ -31,3 +31,8 @@ async def test_private_metrics_and_no_public_schema(client):
     assert response.status_code == 200
     assert response.headers["x-content-type-options"] == "nosniff"
     assert response.headers["cache-control"] == "no-store"
+
+@pytest.mark.asyncio
+async def test_host_header_cannot_bypass_metrics_path_guard(client):
+    response = await client.get("/metrics", headers={"Host": "invalid.example/prefix"})
+    assert response.status_code == 404
