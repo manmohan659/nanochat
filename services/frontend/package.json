@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start -p 3000",
     "lint": "next lint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:session": "sh ../../scripts/test_session_request.sh",
+    "test": "npm run test:session"
   },
   "dependencies": {
     "clsx": "^2.1.1",

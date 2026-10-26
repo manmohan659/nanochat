@@ -1,3 +1,4 @@
+import { withSessionLock, sessionJSON } from './session-request';
 let generation = 0;
 const sessionChannel = typeof window !== 'undefined' && typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('samosachaat-session') : null;
 if (sessionChannel) sessionChannel.onmessage = event => {
@@ -100,20 +101,14 @@ export function authHeaders(): Record<string, string> {
 }
 
 export async function refreshAccessToken(): Promise<string | null> {
-  const refresh = async () => {
-    const response = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'same-origin', cache: 'no-store' });
-    if (!response.ok) return null;
-    const data = await response.json();
-    return typeof data.access_token === 'string' ? data.access_token : null;
-  };
-  return navigator.locks ? navigator.locks.request('samosachaat-refresh', refresh) : refresh();
+  return withSessionLock(async () => {
+    const data = await sessionJSON('/api/auth/refresh');
+    return typeof data?.access_token === 'string' ? data.access_token : null;
+  });
 }
 
 export async function logoutSession(): Promise<void> {
-  const logout = async () => {
-    try { await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }); }
-    finally { clearToken(); sessionChannel?.postMessage('logout'); }
-  };
-  if (navigator.locks) await navigator.locks.request('samosachaat-refresh', logout);
-  else await logout();
+  try {
+    await withSessionLock(async () => { await sessionJSON('/api/auth/logout'); });
+  } finally { clearToken(); sessionChannel?.postMessage('logout'); }
 }
